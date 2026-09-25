@@ -49,7 +49,7 @@ const RESUME = {
   // button — the page has a print stylesheet that makes it look like a résumé.
 
   links: [
-    { label: "GitHub",   url: "https://github.com/your-username" },
+    { label: "GitHub",   url: "https://github.com/vvinniev34" },
     { label: "LinkedIn", url: "https://linkedin.com/in/your-handle" },
     { label: "Email",    url: "mailto:you@example.com" },
     { label: "Résumé",   action: "print" },
@@ -104,7 +104,7 @@ const RESUME = {
           org: "littlefs-viz",
           role: "Filesystem inspector for embedded devices",
           period: "2025",
-          url: "https://github.com/your-username/littlefs-viz",
+          url: "https://github.com/vvinniev34/littlefs-viz",
           bullets: [
             "A single-binary tool that renders littlefs block allocation as a live heatmap. ~900 stars.",
           ],
@@ -114,7 +114,7 @@ const RESUME = {
           org: "pg-slowlog",
           role: "Postgres query profiler",
           period: "2024",
-          url: "https://github.com/your-username/pg-slowlog",
+          url: "https://github.com/vvinniev34/pg-slowlog",
           bullets: [
             "Tails `pg_stat_statements` and surfaces regressions as a diff between two time windows.",
           ],
@@ -173,5 +173,5 @@ const RESUME = {
   ],
 
   /* ---- footer ------------------------------------------------------------ */
-  footer: "Built from a single JSON-ish file. [Source](https://github.com/your-username/your-username.github.io).",
+  footer: "Built from a single JSON-ish file. [Source](https://github.com/vvinniev34/vvinniev34.github.io).",
 };

@@ -56,15 +56,15 @@ style.css    the design
 
 ## Deploying to GitHub Pages
 
-Name the repo `<your-username>.github.io` and it will be served at that URL
+Name the repo `vvinniev34.github.io` and it will be served at that URL
 from the default branch, no configuration needed.
 
 ```bash
 # with the GitHub CLI (brew install gh && gh auth login):
-gh repo create <your-username>.github.io --public --source=. --remote=origin --push
+gh repo create vvinniev34.github.io --public --source=. --remote=origin --push
 
 # without it: create an empty repo of that name on github.com, then
-git remote add origin git@github.com:<your-username>/<your-username>.github.io.git
+git remote add origin git@github.com:vvinniev34/vvinniev34.github.io.git
 git push -u origin main
 ```
 
