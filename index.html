@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loading…</title>
+
+<!-- Set the theme before first paint so there's no white flash in dark mode. -->
+<script>
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    var dark = saved ? saved === "dark"
+                     : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  })();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<!-- Your content. Loaded before the renderer so it's available immediately. -->
+<script src="resume.js"></script>
+</head>
+
+<body>
+
+<header class="topbar" id="topbar" aria-hidden="true">
+  <span class="topbar__name" id="topbar-name"></span>
+</header>
+
+<button class="theme" id="theme" type="button" aria-label="Switch colour theme">
+  <span class="theme__dot"></span>
+</button>
+
+<main id="root" class="page"></main>
+
+<noscript>
+  <div class="page">
+    <p>This site renders from a small data file using JavaScript. Please enable it,
+       or read <a href="resume.js">resume.js</a> directly — it's plain text.</p>
+  </div>
+</noscript>
+
+<script src="site.js"></script>
+</body>
+</html>
