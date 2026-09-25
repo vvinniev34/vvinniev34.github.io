@@ -92,7 +92,16 @@
   /* ---- masthead ----------------------------------------------------------- */
 
   function masthead() {
-    var kids = [el("h1", { class: "masthead__name", text: R.name || "" })];
+    // First word on line one, the rest indented below it.
+    var parts = String(R.name || "").split(/\s+/).filter(Boolean);
+    var name = el("h1", { class: "masthead__name" }, [
+      document.createTextNode(parts[0] || ""),
+    ]);
+    if (parts.length > 1) {
+      name.appendChild(el("span", { class: "ln2", text: parts.slice(1).join(" ") }));
+    }
+
+    var kids = [name];
 
     var bits = [R.role, R.location].filter(Boolean);
     if (bits.length) {
@@ -103,10 +112,20 @@
       }));
     }
 
+    kids.push(el("div", { class: "masthead__rule", "aria-hidden": "true" }));
+
     if (R.intro && R.intro.length) {
       kids.push(el("div", { class: "intro" }, R.intro.map(function (p) {
         return el("p", { html: inline(p) });
       })));
+    }
+
+    if (R.now || R.githubUser) {
+      kids.push(el("p", { class: "now" }, [
+        el("span", { class: "now__dot", "aria-hidden": "true" }),
+        el("span", { class: "now__text", html: inline(R.now || "") }),
+        el("span", { class: "now__live", id: "now-live" }),
+      ]));
     }
 
     if (R.links && R.links.length) {
@@ -142,7 +161,7 @@
     },
 
     entries: function (s) {
-      return el("div", {}, (s.items || []).map(function (it) {
+      return el("div", { class: "stagger" }, (s.items || []).map(function (it) {
         var org = it.url
           ? el("a", {
               href: it.url,
@@ -176,7 +195,7 @@
     },
 
     index: function (s) {
-      return el("ul", { class: "index" }, (s.items || []).map(function (it) {
+      return el("ul", { class: "index stagger" }, (s.items || []).map(function (it) {
         var inner = [
           el("span", { class: "index__title", html: inline(it.title) }),
           it.meta ? leader("index__leader") : null,
@@ -200,7 +219,7 @@
     },
 
     grid: function (s) {
-      return el("div", { class: "grid" }, (s.groups || []).map(function (g) {
+      return el("div", { class: "grid stagger" }, (s.groups || []).map(function (g) {
         return el("div", { class: "grid__row" }, [
           el("div", { class: "grid__label", text: g.label }),
           el("div", { class: "grid__items" }, (g.items || []).map(function (i) {
@@ -211,26 +230,42 @@
     },
   };
 
-  function section(s) {
+  function section(s, n) {
     var body = render[s.type];
     if (!body) {
       console.warn('resume.js: unknown section type "' + s.type + '" — skipped.');
       return null;
     }
+
+    var content = body(s);
+
+    // Stagger children in on scroll rather than revealing the block at once.
+    if ((content.className || "").indexOf("stagger") >= 0) {
+      Array.prototype.forEach.call(content.children, function (c, i) {
+        c.style.setProperty("--i", i);
+      });
+    }
+
     return el("section", { class: "section reveal" }, [
       el("div", { class: "section__head" }, [
+        el("span", {
+          class: "section__num",
+          "aria-hidden": "true",
+          text: ("0" + n).slice(-2),
+        }),
         el("h2", { class: "section__label", text: s.label || "" }),
       ]),
-      body(s),
+      content,
     ]);
   }
 
   /* ---- build -------------------------------------------------------------- */
 
   root.appendChild(masthead());
+  var n = 0;
   (R.sections || []).forEach(function (s) {
-    var node = section(s);
-    if (node) root.appendChild(node);
+    var node = section(s, n + 1);
+    if (node) { root.appendChild(node); n++; }
   });
   if (R.footer) {
     root.appendChild(el("footer", { class: "footer reveal", html: inline(R.footer) }));
@@ -279,4 +314,48 @@
   window.addEventListener("beforeprint", function () {
     Array.prototype.forEach.call(reveals, function (n) { n.classList.add("is-in"); });
   });
+
+  /* ---- live: your most recent public push ---------------------------------
+     Reads the public GitHub events API — no token, no build step. If it's
+     rate-limited or offline it simply renders nothing. Delete `githubUser`
+     from resume.js to turn this off.
+     ------------------------------------------------------------------------ */
+
+  function ago(iso) {
+    var mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 2) return "just now";
+    if (mins < 60) return mins + "m ago";
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h ago";
+    var days = Math.floor(hrs / 24);
+    if (days < 30) return days + "d ago";
+    return Math.floor(days / 30) + "mo ago";
+  }
+
+  (function liveActivity() {
+    var slot = document.getElementById("now-live");
+    if (!slot || !R.githubUser || typeof fetch !== "function") return;
+
+    fetch("https://api.github.com/users/" +
+          encodeURIComponent(R.githubUser) + "/events/public")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (events) {
+        if (!Array.isArray(events)) return;
+        var push = events.filter(function (e) { return e.type === "PushEvent"; })[0];
+        if (!push || !push.repo) return;
+
+        var full = push.repo.name;                   // "owner/repo"
+        var link = el("a", {
+          href: "https://github.com/" + full,
+          text: full.split("/").pop(),
+          target: "_blank",
+          rel: "noopener noreferrer",
+        });
+
+        slot.appendChild(document.createTextNode("· last push to "));
+        slot.appendChild(link);
+        slot.appendChild(document.createTextNode(" " + ago(push.created_at)));
+      })
+      .catch(function () { /* offline or rate-limited — stay quiet */ });
+  })();
 })();

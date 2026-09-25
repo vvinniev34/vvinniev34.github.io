@@ -44,6 +44,13 @@ const RESUME = {
     "Before that I was at Acme, building data infrastructure. I care about systems that are legible to the people who have to operate them at 3am.",
   ],
 
+  /* ---- the "currently" line ---------------------------------------------- */
+  // A pulsing dot, one line of text, and — if you set `githubUser` — your most
+  // recent public push, fetched live. Delete either field to hide that half.
+
+  now: "Currently building developer tooling at Meta.",
+  githubUser: "vvinniev34",
+
   /* ---- links shown under the intro --------------------------------------- */
   // `action: "print"` turns the link into a "print this page as a PDF résumé"
   // button — the page has a print stylesheet that makes it look like a résumé.
