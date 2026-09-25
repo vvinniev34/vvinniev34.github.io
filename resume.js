@@ -51,6 +51,14 @@ const RESUME = {
   now: "Currently building developer tooling at Meta.",
   githubUser: "vvinniev34",
 
+  /* ---- interactive bits -------------------------------------------------- */
+  // heroCanvas: the drifting flow field behind your name (canvas.js)
+  // terminal:   the prompt you can actually type into (terminal.js)
+  // Set either to false to remove it entirely.
+
+  heroCanvas: true,
+  terminal: true,
+
   /* ---- links shown under the intro --------------------------------------- */
   // `action: "print"` turns the link into a "print this page as a PDF résumé"
   // button — the page has a print stylesheet that makes it look like a résumé.

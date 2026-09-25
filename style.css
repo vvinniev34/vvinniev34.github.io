@@ -127,12 +127,29 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 /* ---- masthead ------------------------------------------------------------- */
 
 .masthead {
+  position: relative;
   padding-bottom: var(--step);
   /* Let the first screen breathe — the name should own it. */
   min-height: min(78vh, 42rem);
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+/* The flow field sits behind the name, bleeding past the text column and
+   fading out at the edges so it never fights the type. */
+.hero__canvas {
+  position: absolute;
+  z-index: -1;
+  top: -6%;
+  left: 50%;
+  width: 100vw;
+  height: 112%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(120% 85% at 50% 45%, #000 25%, transparent 78%);
+          mask-image: radial-gradient(120% 85% at 50% 45%, #000 25%, transparent 78%);
+  opacity: .85;
 }
 
 .masthead__name {
@@ -232,6 +249,86 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 .linkrow a:focus-visible, .linkrow button:focus-visible { color: var(--accent); outline: none; }
 .linkrow a:hover::after, .linkrow button:hover::after,
 .linkrow a:focus-visible::after, .linkrow button:focus-visible::after { transform: scaleX(1); }
+
+/* ---- terminal ------------------------------------------------------------- */
+
+.term {
+  margin-top: calc(var(--step) * -0.35);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fg) 3%, var(--bg));
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: .78rem;
+  line-height: 1.75;
+  cursor: text;
+  transition: border-color .3s ease;
+}
+.term:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--rule)); }
+
+.term__bar {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .5rem .8rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--wash);
+}
+.term__dots {
+  flex: none;
+  width: .44rem; height: .44rem;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: .7rem 0 0 var(--muted), 1.4rem 0 0 var(--muted);
+  margin-right: 1.4rem;
+  opacity: .55;
+}
+.term__title {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.term__body {
+  max-height: 20rem;
+  overflow-y: auto;
+  padding: .85rem .9rem .3rem;
+  overscroll-behavior: contain;
+}
+.term__body::-webkit-scrollbar { width: 6px; }
+.term__body::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+
+.term__row { white-space: pre-wrap; word-break: break-word; color: var(--fg-soft); }
+.term__row--dim    { color: var(--muted); }
+.term__row--accent { color: var(--accent); }
+.term__row--err    { color: var(--accent); opacity: .85; }
+.term__row--cmd    { color: var(--fg); margin-top: .5rem; }
+
+.term__ps1 { color: var(--accent); user-select: none; }
+
+.term__line {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  padding: .3rem .9rem .85rem;
+}
+.term__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  padding: 0;
+  outline: none;
+  caret-color: var(--accent);
+}
+.term__input::placeholder { color: var(--muted); opacity: .65; }
+
+@media (max-width: 34rem) {
+  .term { font-size: .72rem; }
+  .term__body { max-height: 15rem; }
+}
 
 /* ---- sections ------------------------------------------------------------- */
 
@@ -497,7 +594,8 @@ code {
     --muted: #555; --rule: #bbb; --wash: transparent; --grain: 0;
   }
   body::after { display: none; }
-  .topbar, .theme, .linkrow button, .now__dot, .footer { display: none !important; }
+  .topbar, .theme, .linkrow button, .now__dot, .footer,
+  .term, .hero__canvas { display: none !important; }
 
   body { font-size: 10.5pt; line-height: 1.4; }
   .page { max-width: none; padding: 0; }
