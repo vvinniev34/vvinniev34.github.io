@@ -472,14 +472,14 @@
 
       g.beginPath();
       g.ellipse(0, 0, st.r, st.r * st.squash, 0, 0, Math.PI * 2);
-      g.globalAlpha = 0.42 + st.tone * 0.2;
+      g.globalAlpha = 0.62 + st.tone * 0.24;
       g.fillStyle = st.tone > 0.62 ? C.stoneLit : C.stone;
       g.fill();
 
       // catchlight on the upper edge, so they read as rounded not as discs
       g.beginPath();
       g.ellipse(-st.r * 0.24, -st.r * 0.28, st.r * 0.5, st.r * st.squash * 0.38, 0, 0, Math.PI * 2);
-      g.globalAlpha = 0.16;
+      g.globalAlpha = 0.3;
       g.fillStyle = C.stoneLit;
       g.fill();
 
@@ -561,7 +561,7 @@
         var g = ctx.createLinearGradient(cl.x, cl.y, tipx, tipy);
         g.addColorStop(0, C.weed);
         g.addColorStop(1, C.weedTip);
-        ctx.globalAlpha = 0.72;
+        ctx.globalAlpha = 0.88;
         ctx.fillStyle = g;
         ctx.fill();
       }
@@ -628,7 +628,7 @@
       vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.3,
                                           W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
       vignette.addColorStop(0, "transparent");
-      vignette.addColorStop(1, "rgba(0,26,20,0.3)");
+      vignette.addColorStop(1, "rgba(0,26,20,0.2)");
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = vignette;

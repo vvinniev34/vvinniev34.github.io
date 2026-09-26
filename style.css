@@ -30,10 +30,10 @@ html[data-theme="light"] {
   --pond-light: rgba(238, 255, 247, 0.8);
   --caustic:    236, 255, 246;   /* raw rgb — the light web on the bottom */
   --silt:       #4a6b60;   /* mottling on the pond floor */
-  --stone:      #93a498;   /* pebbles on the bottom */
-  --stone-lit:  #b7c3b5;
-  --weed:       #4c7a58;   /* submerged planting */
-  --weed-tip:   #6d9e72;
+  --stone:      #6d8178;   /* pebbles on the bottom */
+  --stone-lit:  #c6d2c6;
+  --weed:       #3a6b49;   /* submerged planting */
+  --weed-tip:   #63a06d;
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
@@ -56,10 +56,10 @@ html[data-theme="dark"] {
   --pond-light: rgba(130, 235, 212, 0.34);
   --caustic:    134, 240, 214;   /* raw rgb — the light web on the bottom */
   --silt:       #04100f;   /* mottling on the pond floor */
-  --stone:      #16292a;   /* pebbles on the bottom */
-  --stone-lit:  #243b39;
-  --weed:       #14402f;   /* submerged planting */
-  --weed-tip:   #256b46;
+  --stone:      #40736a;   /* pebbles on the bottom */
+  --stone-lit:  #6ba496;
+  --weed:       #1f6b4b;   /* submerged planting */
+  --weed-tip:   #44a877;
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
