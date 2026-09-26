@@ -33,6 +33,7 @@
   var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0 };
   var running = false, raf = null, nextAmbient = 3;
+  var wakeTravel = 0;   // distance the cursor has covered since the last wake ring
 
   /* ---- palette ------------------------------------------------------------ */
 
@@ -180,7 +181,7 @@
     }
 
     // Shoved by any wavefront passing over them.
-    waveForce(head.x, head.y, _wf);
+    waveForce(head.x, head.y, _wf, true);
     if (_wf[0] || _wf[1]) {
       ax += _wf[0] * 3.0;
       ay += _wf[1] * 3.0;
@@ -217,7 +218,7 @@
         ay += ((best.y - head.y) / pd) * pull;
         if (pd < f.girth * 1.4) {          // eaten
           best.gone = true;
-          addRipple(best.x, best.y, 16 + Math.random() * 12, 0, 0.45);
+          addRipple(best.x, best.y, 16 + Math.random() * 12, 0, 0.45, 0.3);
         }
       }
     }
@@ -573,7 +574,7 @@
   function drawWeeds() {
     for (var i = 0; i < weeds.length; i++) {
       var cl = weeds[i];
-      waveForce(cl.x, cl.y, _wf);
+      waveForce(cl.x, cl.y, _wf, true);
       cl.kick += ((_wf[0] + _wf[1]) * 0.7 - cl.kick) * 0.16;
       for (var b = 0; b < cl.blades.length; b++) {
         var bl = cl.blades[b];
@@ -707,7 +708,7 @@
 
       /* Shoved by passing wavefronts, then pulled back — a pad rocking in
          the wake is the clearest read that a splash disturbed the water. */
-      waveForce(p.x + p.ox, p.y + p.oy, _wf);
+      waveForce(p.x + p.ox, p.y + p.oy, _wf, false);
       p.vx += _wf[0] * 2.6 - p.ox * 0.06;
       p.vy += _wf[1] * 2.6 - p.oy * 0.06;
       p.vx *= 0.88; p.vy *= 0.88;
@@ -786,26 +787,32 @@
 
   /* ---- ripples & splashes ------------------------------------------------- */
 
-  function addRipple(x, y, max, delay, weight) {
+  /* `sub` is how far down the disturbance reaches: 1 shifts everything
+     including the fish and the planting on the bottom, ~0.1 only ruffles
+     the surface. The cursor's wake is shallow; a click goes all the way. */
+  function addRipple(x, y, max, delay, weight, sub) {
     ripples.push({ x: x, y: y, r: 0, max: max, life: 0, delay: delay || 0,
                    weight: weight == null ? 1 : weight,
+                   sub: sub == null ? 1 : sub,
                    seed: Math.random() * 100 });
   }
 
   /* Outward push from any wavefront currently passing over a point. This is
      what makes a splash disturb the pond rather than just draw circles on
      top of it — fish, food, pads and planting all read from it. */
-  function waveForce(x, y, out) {
+  function waveForce(x, y, out, subsurface) {
     out[0] = 0; out[1] = 0;
     for (var i = 0; i < ripples.length; i++) {
       var rp = ripples[i];
       if (rp.delay > 0 || rp.r < 1) continue;
+      var reach = subsurface ? rp.sub : 1;
+      if (reach < 0.02) continue;
       var dx = x - rp.x, dy = y - rp.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       var band = Math.abs(d - rp.r);
       var width = 22 + rp.r * 0.12;
       if (band > width) continue;
-      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight;
+      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight * reach;
       out[0] += (dx / d) * k;
       out[1] += (dy / d) * k;
     }
@@ -814,10 +821,10 @@
 
   function splash(x, y) {
     // Four rings staggered outward, the leading one much wider than before.
-    addRipple(x, y, 230, 0,    1.35);
-    addRipple(x, y, 165, 0.07, 1.05);
-    addRipple(x, y, 105, 0.15, 0.8);
-    addRipple(x, y, 58,  0.24, 0.55);
+    addRipple(x, y, 230, 0,    1.35, 1);
+    addRipple(x, y, 165, 0.07, 1.05, 1);
+    addRipple(x, y, 105, 0.15, 0.8, 1);
+    addRipple(x, y, 58,  0.24, 0.55, 1);
 
     // The white burst at the point of impact — this is most of what makes a
     // click feel like it hit water rather than just starting an animation.
@@ -884,7 +891,7 @@
       d.x += d.vx; d.y += d.vy;
       d.vx *= 0.94; d.vy *= 0.94;
       if (d.age >= d.life) {
-        addRipple(d.x, d.y, 10 + Math.random() * 14, 0, 0.4);
+        addRipple(d.x, d.y, 10 + Math.random() * 14, 0, 0.4, 0.5);
         drops.splice(j, 1);
       }
     }
@@ -902,7 +909,8 @@
          it travels. Radius is modulated per-angle, and the distortion grows
          with distance from the impact. */
       function ring(radius, alpha, width, colour) {
-        var steps = 44;
+        // Scale detail with size; the cursor wake spawns a lot of small ones.
+        var steps = Math.max(10, Math.min(44, Math.round(radius / 4)));
         ctx.beginPath();
         for (var si = 0; si <= steps; si++) {
           var ang = (si / steps) * Math.PI * 2;
@@ -922,8 +930,9 @@
       }
 
       ring(rp.r, a, 2.6 * rp.weight * (1 - k * 0.45), C.light);
-      // A darker trailing ring gives the crest some relief.
-      ring(rp.r * 0.88, a * 0.5, 1.1 * rp.weight, C.deep);
+      // A darker trailing ring gives the crest some relief — worth it only
+      // on the bigger rings.
+      if (rp.r > 34) ring(rp.r * 0.88, a * 0.5, 1.1 * rp.weight, C.deep);
     });
 
     bursts.forEach(function (bu) {
@@ -985,10 +994,31 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
 
+    /* The cursor drags a wake across the surface. Rings are spawned per
+       distance travelled rather than per frame, so the trail is even at any
+       speed, and they're shallow (sub 0.1) — they ruffle the surface and
+       shove the food about but barely reach the fish or the planting. That
+       separation is deliberate: only a click should stir the bottom. */
+    if (mouse.on && mouse.px > -9000) {
+      var mdx = mouse.x - mouse.px, mdy = mouse.y - mouse.py;
+      wakeTravel += Math.sqrt(mdx * mdx + mdy * mdy);
+      var stride = 26;
+      if (wakeTravel > stride && ripples.length < 70) {
+        wakeTravel = 0;
+        addRipple(mouse.x, mouse.y,
+                  22 + mouse.vel * 46,          // faster cursor, wider ring
+                  0,
+                  0.2 + mouse.vel * 0.42,
+                  0.1);                          // shallow
+      }
+    }
+    mouse.px = mouse.x;
+    mouse.py = mouse.y;
+
     for (var pk = pellets.length - 1; pk >= 0; pk--) {
       var pl = pellets[pk];
       pl.age += dt;
-      waveForce(pl.x, pl.y, _wf);
+      waveForce(pl.x, pl.y, _wf, false);
       pl.vx += _wf[0] * 0.9;
       pl.vy += _wf[1] * 0.9;
       pl.x += pl.vx; pl.y += pl.vy;
@@ -1000,7 +1030,7 @@
     nextAmbient -= dt;
     if (nextAmbient <= 0) {
       nextAmbient = 4 + Math.random() * 7;
-      addRipple(Math.random() * W, Math.random() * H, 26 + Math.random() * 30, 0, 0.55);
+      addRipple(Math.random() * W, Math.random() * H, 26 + Math.random() * 30, 0, 0.55, 0.45);
     }
   }
 
@@ -1023,6 +1053,26 @@
       ctx.fillStyle = "#f0c27a";
       ctx.fill();
     }
+    /* A meniscus that always sits under the pointer, so the cursor reads as
+       touching the water rather than hovering over a picture of it. */
+    if (mouse.on) {
+      var dr = 11 + mouse.vel * 15;
+      var dg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, dr);
+      dg.addColorStop(0, "transparent");
+      dg.addColorStop(0.65, "transparent");
+      dg.addColorStop(1, C.light);
+      ctx.globalAlpha = 0.3 + mouse.vel * 0.3;
+      ctx.fillStyle = dg;
+      ctx.fillRect(mouse.x - dr, mouse.y - dr, dr * 2, dr * 2);
+
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, dr * 0.78, 0, Math.PI * 2);
+      ctx.strokeStyle = C.light;
+      ctx.globalAlpha = 0.18 + mouse.vel * 0.22;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
     ctx.globalAlpha = 1;
 
     drawPads();          // floating on the surface, so over the fish
@@ -1114,6 +1164,8 @@
     fish: function () { return fish; },
     pads: function () { return pads; },
     weeds: function () { return weeds; },
+    ripples: function () { return ripples; },
+    food: function () { return pellets; },
   };
 
   if (reduced) {
