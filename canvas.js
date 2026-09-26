@@ -53,6 +53,10 @@
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
     C.caustic   = v("--caustic", "236, 255, 246").split(",").map(Number);
+    C.stone     = v("--stone", "#93a498");
+    C.stoneLit  = v("--stone-lit", "#b7c3b5");
+    C.weed      = v("--weed", "#4c7a58");
+    C.weedTip   = v("--weed-tip", "#6d9e72");
   }
 
   /* Koi varieties, loosely. Each is [body, patch] plus how blotchy it is. */
@@ -357,7 +361,7 @@
 
   /* ---- water -------------------------------------------------------------- */
 
-  var baseGrad = null;   // rebuilt only on resize / theme change
+  var baseGrad = null, vignette = null;   // rebuilt on resize / theme change
 
   /* ---- caustics ------------------------------------------------------------
      The bright shifting web on the bottom of a pond. Interfering sine waves
@@ -417,22 +421,135 @@
 
   var siltCv = null;
 
-  function initSilt() {
+  function initFloor() {
+    /* Silt and stones never move, so they're baked once into a single texture
+       rather than re-drawn every frame — around 150 fills a frame saved.
+       Baked at CSS resolution, so slightly soft when upscaled on a retina
+       display, which is roughly what a pond bottom looks like anyway. */
     siltCv = document.createElement("canvas");
-    var sw = Math.max(64, Math.round(W / 3));
-    var sh = Math.max(48, Math.round(H / 3));
-    siltCv.width = sw;
-    siltCv.height = sh;
+    siltCv.width = Math.max(64, W);
+    siltCv.height = Math.max(48, H);
     var g = siltCv.getContext("2d");
-    for (var i = 0; i < 110; i++) {
-      var x = Math.random() * sw, y = Math.random() * sh;
-      var r = 6 + Math.random() * (sw / 7);
+
+    for (var i = 0; i < 130; i++) {
+      var x = Math.random() * W, y = Math.random() * H;
+      var r = 20 + Math.random() * (W / 5);
       var rg = g.createRadialGradient(x, y, 0, x, y, r);
       rg.addColorStop(0, "rgba(0,0,0," + (0.03 + Math.random() * 0.07).toFixed(3) + ")");
       rg.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = rg;
       g.fillRect(x - r, y - r, r * 2, r * 2);
     }
+
+    for (var k = 0; k < stones.length; k++) {
+      var st = stones[k];
+      g.save();
+      g.translate(st.x, st.y);
+      g.rotate(st.rot);
+
+      g.beginPath();
+      g.ellipse(st.r * 0.18, st.r * 0.22, st.r * 1.08, st.r * st.squash * 1.08, 0, 0, Math.PI * 2);
+      g.globalAlpha = 0.18;
+      g.fillStyle = "#03120d";
+      g.fill();
+
+      g.beginPath();
+      g.ellipse(0, 0, st.r, st.r * st.squash, 0, 0, Math.PI * 2);
+      g.globalAlpha = 0.42 + st.tone * 0.2;
+      g.fillStyle = st.tone > 0.62 ? C.stoneLit : C.stone;
+      g.fill();
+
+      // catchlight on the upper edge, so they read as rounded not as discs
+      g.beginPath();
+      g.ellipse(-st.r * 0.24, -st.r * 0.28, st.r * 0.5, st.r * st.squash * 0.38, 0, 0, Math.PI * 2);
+      g.globalAlpha = 0.16;
+      g.fillStyle = C.stoneLit;
+      g.fill();
+
+      g.restore();
+    }
+  }
+
+  /* ---- the bottom ----------------------------------------------------------
+     Stones and submerged planting. Positions are fixed per resize; only the
+     weed sway is animated. All of this sits under the caustics, so the light
+     web dapples across it, and under the fish, which swim above it.
+     -------------------------------------------------------------------------- */
+
+  var stones = [], weeds = [];
+
+  function makeBottom() {
+    stones = [];
+    var n = Math.round((W * H) / 26000);
+    for (var i = 0; i < n; i++) {
+      var r = 3 + Math.random() * Math.random() * 22;       // mostly gravel
+      stones.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: r,
+        squash: 0.55 + Math.random() * 0.4,
+        rot: Math.random() * Math.PI,
+        tone: Math.random(),
+      });
+    }
+
+    weeds = [];
+    var wn = Math.max(4, Math.round((W * H) / 130000));
+    for (var j = 0; j < wn; j++) {
+      var blades = [];
+      var nb = 5 + (Math.random() * 6 | 0);
+      for (var b = 0; b < nb; b++) {
+        blades.push({
+          a: Math.random() * Math.PI * 2,
+          len: 22 + Math.random() * 48,
+          w: 2.2 + Math.random() * 2.6,
+          phase: Math.random() * Math.PI * 2,
+          bend: 0.25 + Math.random() * 0.5,
+        });
+      }
+      weeds.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        phase: Math.random() * Math.PI * 2,
+        blades: blades,
+      });
+    }
+  }
+
+  function drawWeeds() {
+    for (var i = 0; i < weeds.length; i++) {
+      var cl = weeds[i];
+      for (var b = 0; b < cl.blades.length; b++) {
+        var bl = cl.blades[b];
+        // every blade in a clump leans with the same slow current
+        var sway = Math.sin(t * 0.6 + cl.phase + bl.phase) * bl.bend;
+
+        var ux = Math.cos(bl.a), uy = Math.sin(bl.a);
+        var nx = -uy, ny = ux;
+        var L = bl.len;
+
+        var tipx = cl.x + ux * L + nx * sway * L * 0.45;
+        var tipy = cl.y + uy * L + ny * sway * L * 0.45;
+        var cxp = cl.x + ux * L * 0.5 + nx * sway * L * 0.3;
+        var cyp = cl.y + uy * L * 0.5 + ny * sway * L * 0.3;
+
+        var hw = bl.w * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cl.x + nx * hw, cl.y + ny * hw);
+        ctx.quadraticCurveTo(cxp + nx * hw * 0.5, cyp + ny * hw * 0.5, tipx, tipy);
+        ctx.quadraticCurveTo(cxp - nx * hw * 0.5, cyp - ny * hw * 0.5,
+                             cl.x - nx * hw, cl.y - ny * hw);
+        ctx.closePath();
+
+        var g = ctx.createLinearGradient(cl.x, cl.y, tipx, tipy);
+        g.addColorStop(0, C.weed);
+        g.addColorStop(1, C.weedTip);
+        ctx.globalAlpha = 0.72;
+        ctx.fillStyle = g;
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawWater() {
@@ -451,19 +568,54 @@
       ctx.drawImage(siltCv, 0, 0, W, H);
     }
 
+    drawWeeds();
+
     if (cCv) {
       renderCaustics();
-      ctx.globalAlpha = 0.55;
       ctx.imageSmoothingEnabled = true;
       if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+
+      ctx.globalAlpha = 0.5;
       ctx.drawImage(cCv, 0, 0, W, H);
-      // A second pass, offset and scaled differently, so the web doesn't
-      // read as one tiling pattern.
-      ctx.globalAlpha = 0.3;
-      ctx.drawImage(cCv, -W * 0.18, -H * 0.12, W * 1.42, H * 1.36);
+
+      /* A second pass, mirrored as well as offset and rescaled. Offsetting
+         alone left the same web visibly repeated; flipping it breaks the
+         correlation so the two layers interfere instead. */
+      ctx.save();
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+      ctx.globalAlpha = 0.34;
+      ctx.drawImage(cCv, -W * 0.13, -H * 0.17, W * 1.37, H * 1.41);
+      ctx.restore();
     }
 
+    /* Surface sheen: two very soft bands drifting across, which is what stops
+       the water reading as a flat tinted pane. */
+    for (var sgi = 0; sgi < 2; sgi++) {
+      var ang = 0.5 + sgi * 0.35;
+      var off = ((t * (0.035 + sgi * 0.02) + sgi * 0.5) % 1.6) - 0.3;
+      var sx = W * off, sy = H * (off * 0.4);
+      var sg = ctx.createLinearGradient(sx, sy,
+                                        sx + Math.cos(ang) * W * 0.55,
+                                        sy + Math.sin(ang) * H * 0.9);
+      sg.addColorStop(0, "transparent");
+      sg.addColorStop(0.5, C.light);
+      sg.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = sg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Depth at the corners.
+    if (!vignette) {
+      vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.3,
+                                          W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+      vignette.addColorStop(0, "transparent");
+      vignette.addColorStop(1, "rgba(0,26,20,0.3)");
+    }
     ctx.globalAlpha = 1;
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
   }
 
   /* ---- lily pads ------------------------------------------------------------
@@ -781,8 +933,10 @@
     cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     baseGrad = null;
+    vignette = null;
     initCaustics();
-    initSilt();
+    makeBottom();
+    initFloor();
     makePads();
     stock();
   }
@@ -850,7 +1004,9 @@
   new MutationObserver(function () {
     readColors();
     baseGrad = null;
+    vignette = null;
     initCaustics();
+    initFloor();          // stones are baked in, so they need restyling too
     var pals = palettes();
     fish.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
