@@ -93,7 +93,11 @@
        briskly. Without this every koi swims identically and the size
        variation stops reading as size — it just looks like a zoom level. */
     var slow = 1 / Math.sqrt(scale);
-    var cruise = (0.38 + Math.random() * 0.26) * (1.22 - scale * 0.2);
+
+    /* Temperament: some koi are idlers, some are brisk. This is a much wider
+       spread than size alone gave, so the school stops moving as one mass. */
+    var temper = 0.45 + Math.random() * 1.2;
+    var cruise = (0.3 + Math.random() * 0.18) * temper * (1.22 - scale * 0.2);
 
     var f = {
       pal: pal,
@@ -109,8 +113,14 @@
       /* Hard ceiling on velocity, and a startle level that decays, so nothing
          can change direction or speed instantaneously. Bigger fish have a
          higher top speed but accelerate and turn more sluggishly. */
-      maxSpeed: 2.3 * (0.85 + scale * 0.3),
+      maxSpeed: 2.3 * (0.85 + scale * 0.3) * (0.7 + temper * 0.45),
       startle: 0,
+      /* Each fish also breathes its own slow rhythm of effort, and now and
+         then takes off for no reason, the way real fish do. */
+      temper: temper,
+      effortRate: 0.1 + Math.random() * 0.3,
+      effortPhase: Math.random() * Math.PI * 2,
+      dash: 0,
       heading: Math.random() * Math.PI * 2,
       wander: Math.random() * Math.PI * 2,
       phase: Math.random() * Math.PI * 2,
@@ -195,13 +205,20 @@
     f.heading += turn;
 
     // Tail beat — faster when startled. This wiggle is what drives the body.
-    f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * f.slow * dt * 60;
+    f.phase += (0.06 + f.speed * 0.14 + fleeing * 0.16) * f.slow * dt * 60;
     var swim = f.heading + Math.sin(f.phase) * 0.14 * f.wag;
 
     /* Rate-limited acceleration rather than an exponential snap, then a hard
        clamp. Speeding up is slower than slowing down, which is how a fish
        actually behaves. */
-    var want = f.base + panic * (f.maxSpeed - f.base);
+    // Spontaneous dart: roughly once every ten seconds, unprompted.
+    f.dash *= Math.max(0, 1 - dt * 0.85);
+    if (Math.random() < 0.0018 * dt * 60) f.dash = 0.35 + Math.random() * 0.5;
+
+    // Slow personal rhythm of effort on top of the cruising speed.
+    var effort = f.base * (0.72 + 0.4 * Math.sin(t * f.effortRate + f.effortPhase));
+    var urge = panic > f.dash ? panic : f.dash;
+    var want = effort + urge * (f.maxSpeed - effort);
     var dv = want - f.speed;
     var cap = (dv > 0 ? 0.045 : 0.07) * Math.min(f.slow, 1.2) * dt * 60;
     if (dv > cap) dv = cap;
