@@ -120,12 +120,17 @@ body::after {
 .col--intro {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   max-height: 88dvh;
   overflow-y: auto;
   scrollbar-width: none;
+  /* Lets the name size itself against this panel rather than the viewport —
+     it lives in a half-width column, so vw units badly overshoot. */
+  container-type: inline-size;
 }
-.masthead { width: 100%; }
+/* Auto margins centre the block but, unlike justify-content:center, never
+   clip the overflowing top out of reach. That was cropping the name off the
+   top of shorter laptop screens. */
+.masthead { width: 100%; margin-block: auto; }
 .col--intro::-webkit-scrollbar { display: none; }
 
 .col--term { display: flex; min-height: 0; }
@@ -153,6 +158,19 @@ body::after {
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
+}
+
+/* Short laptop screens: pull the vertical spacing in so the column fits
+   without needing to scroll at all. */
+@media (max-height: 800px) {
+  .masthead__role { margin-top: 1rem; }
+  .masthead__rule { margin: 1.5rem 0; }
+  .intro { font-size: .95rem; }
+  .intro p { margin-bottom: .8rem; }
+  .now { margin-top: 1.25rem; }
+  .linkrow { margin-top: 1.35rem; }
+  .col--intro { padding: clamp(1.25rem, 2.2vw, 2rem); }
+  .term { min-height: 15rem; }
 }
 
 /* Below this the two columns can't both breathe, so stack them. */
@@ -239,9 +257,14 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   margin: 0;
   font-family: var(--serif);
   font-weight: 400;
-  font-size: clamp(3.4rem, 13vw, 6.5rem);
-  line-height: .92;
+  /* Bounded by the panel's width AND the viewport's height, so it can't
+     outgrow either axis. */
+  font-size: clamp(2.1rem, min(19cqw, 10.5dvh), 6rem);
+  line-height: .95;
   letter-spacing: -0.018em;
+}
+@supports not (width: 1cqw) {
+  .masthead__name { font-size: clamp(2.1rem, min(8.5vw, 10.5dvh), 6rem); }
 }
 /* Second word of the name drops to its own line and indents — editorial. */
 .masthead__name .ln2 { display: block; padding-left: .12em; }
