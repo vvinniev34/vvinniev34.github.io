@@ -30,7 +30,7 @@
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var W = 0, H = 0, dpr = 1, t = 0;
-  var fish = [], ripples = [], drops = [], bursts = [], crowns = [];
+  var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0 };
   var running = false, raf = null, nextAmbient = 3;
 
@@ -179,6 +179,15 @@
       }
     }
 
+    // Shoved by any wavefront passing over them.
+    waveForce(head.x, head.y, _wf);
+    if (_wf[0] || _wf[1]) {
+      ax += _wf[0] * 3.0;
+      ay += _wf[1] * 3.0;
+      head.x += _wf[0] * 3.4;
+      head.y += _wf[1] * 3.4;
+    }
+
     /* Keep them in frame. This is summed with the flee vector rather than
        replacing it — overriding would pin a fleeing fish against the wall and
        it would just mill about next to the cursor. */
@@ -188,9 +197,36 @@
     if (head.y < m)          ay += (1 - head.y / m) * 2.6;
     else if (head.y > H - m) ay -= (1 - (H - head.y) / m) * 2.6;
 
+    /* Food beats fear: a fed koi will come back towards the surface even
+       with the cursor nearby. Pull scales with proximity so the nearest fish
+       commit hardest and the others drift over. */
+    var feeding = 0;
+    if (pellets.length) {
+      var best = null, bd = 1e9;
+      for (var pi = 0; pi < pellets.length; pi++) {
+        var pl = pellets[pi];
+        var pdx = pl.x - head.x, pdy = pl.y - head.y;
+        var pd2 = pdx * pdx + pdy * pdy;
+        if (pd2 < bd) { bd = pd2; best = pl; }
+      }
+      var pd = Math.sqrt(bd) || 1;
+      if (best && pd < 430) {
+        feeding = 1 - pd / 430;
+        var pull = 3.4 * feeding;
+        ax += ((best.x - head.x) / pd) * pull;
+        ay += ((best.y - head.y) / pd) * pull;
+        if (pd < f.girth * 1.4) {          // eaten
+          best.gone = true;
+          addRipple(best.x, best.y, 16 + Math.random() * 12, 0, 0.45);
+        }
+      }
+    }
+
     // A recent splash counts as fear too, and fades out on its own.
     if (f.startle > fleeing) fleeing = f.startle;
     if (f.startle > panic) panic = f.startle;
+    if (feeding * 0.8 > panic) panic = feeding * 0.8;
+    if (feeding > fleeing) fleeing = feeding;
 
     var desired = Math.atan2(ay, ax);
 
@@ -528,6 +564,7 @@
         x: Math.random() * W,
         y: Math.random() * H,
         phase: Math.random() * Math.PI * 2,
+        kick: 0,
         blades: blades,
       });
     }
@@ -536,10 +573,14 @@
   function drawWeeds() {
     for (var i = 0; i < weeds.length; i++) {
       var cl = weeds[i];
+      waveForce(cl.x, cl.y, _wf);
+      cl.kick += ((_wf[0] + _wf[1]) * 0.7 - cl.kick) * 0.16;
       for (var b = 0; b < cl.blades.length; b++) {
         var bl = cl.blades[b];
-        // every blade in a clump leans with the same slow current
+        // every blade in a clump leans with the same slow current…
         var sway = Math.sin(t * 0.6 + cl.phase + bl.phase) * bl.bend;
+        // …plus a kick from any wavefront crossing the clump
+        sway += cl.kick * bl.bend * 2.4;
 
         var ux = Math.cos(bl.a), uy = Math.sin(bl.a);
         var nx = -uy, ny = ux;
@@ -653,6 +694,7 @@
         rot: Math.random() * Math.PI * 2,
         phase: Math.random() * Math.PI * 2,
         flower: Math.random() < 0.34,
+        ox: 0, oy: 0, vx: 0, vy: 0, tilt: 0,   // displaced by passing waves
       });
     }
   }
@@ -663,9 +705,18 @@
       var bob = Math.sin(t * 0.5 + p.phase) * 1.8;
       var drift = Math.sin(t * 0.11 + p.phase) * 6;
 
+      /* Shoved by passing wavefronts, then pulled back — a pad rocking in
+         the wake is the clearest read that a splash disturbed the water. */
+      waveForce(p.x + p.ox, p.y + p.oy, _wf);
+      p.vx += _wf[0] * 2.6 - p.ox * 0.06;
+      p.vy += _wf[1] * 2.6 - p.oy * 0.06;
+      p.vx *= 0.88; p.vy *= 0.88;
+      p.ox += p.vx; p.oy += p.vy;
+      p.tilt += ((_wf[0] + _wf[1]) * 0.22 - p.tilt) * 0.12;
+
       ctx.save();
-      ctx.translate(p.x + drift, p.y + bob);
-      ctx.rotate(p.rot + Math.sin(t * 0.13 + p.phase) * 0.06);
+      ctx.translate(p.x + drift + p.ox, p.y + bob + p.oy);
+      ctx.rotate(p.rot + Math.sin(t * 0.13 + p.phase) * 0.06 + p.tilt);
 
       // shadow cast down onto the floor
       ctx.beginPath();
@@ -737,8 +788,29 @@
 
   function addRipple(x, y, max, delay, weight) {
     ripples.push({ x: x, y: y, r: 0, max: max, life: 0, delay: delay || 0,
-                   weight: weight == null ? 1 : weight });
+                   weight: weight == null ? 1 : weight,
+                   seed: Math.random() * 100 });
   }
+
+  /* Outward push from any wavefront currently passing over a point. This is
+     what makes a splash disturb the pond rather than just draw circles on
+     top of it — fish, food, pads and planting all read from it. */
+  function waveForce(x, y, out) {
+    out[0] = 0; out[1] = 0;
+    for (var i = 0; i < ripples.length; i++) {
+      var rp = ripples[i];
+      if (rp.delay > 0 || rp.r < 1) continue;
+      var dx = x - rp.x, dy = y - rp.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var band = Math.abs(d - rp.r);
+      var width = 22 + rp.r * 0.12;
+      if (band > width) continue;
+      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight;
+      out[0] += (dx / d) * k;
+      out[1] += (dy / d) * k;
+    }
+  }
+  var _wf = [0, 0];
 
   function splash(x, y) {
     // Four rings staggered outward, the leading one much wider than before.
@@ -826,20 +898,32 @@
       var a = (1 - k) * (1 - k) * 0.78 * rp.weight;
       if (a <= 0.004) return;
 
-      ctx.beginPath();
-      ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-      ctx.strokeStyle = C.light;
-      ctx.globalAlpha = a;
-      ctx.lineWidth = 2.6 * rp.weight * (1 - k * 0.45);
-      ctx.stroke();
+      /* An expanding circle reads as a graphic; a real wavefront buckles as
+         it travels. Radius is modulated per-angle, and the distortion grows
+         with distance from the impact. */
+      function ring(radius, alpha, width, colour) {
+        var steps = 44;
+        ctx.beginPath();
+        for (var si = 0; si <= steps; si++) {
+          var ang = (si / steps) * Math.PI * 2;
+          var warp = 1
+            + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
+            + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
+            + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
+          var rr = radius * warp;
+          var px = rp.x + Math.cos(ang) * rr, py = rp.y + Math.sin(ang) * rr;
+          if (si === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = colour;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = width;
+        ctx.stroke();
+      }
 
+      ring(rp.r, a, 2.6 * rp.weight * (1 - k * 0.45), C.light);
       // A darker trailing ring gives the crest some relief.
-      ctx.beginPath();
-      ctx.arc(rp.x, rp.y, rp.r * 0.88, 0, Math.PI * 2);
-      ctx.strokeStyle = C.deep;
-      ctx.globalAlpha = a * 0.5;
-      ctx.lineWidth = 1.1 * rp.weight;
-      ctx.stroke();
+      ring(rp.r * 0.88, a * 0.5, 1.1 * rp.weight, C.deep);
     });
 
     bursts.forEach(function (bu) {
@@ -901,6 +985,17 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
 
+    for (var pk = pellets.length - 1; pk >= 0; pk--) {
+      var pl = pellets[pk];
+      pl.age += dt;
+      waveForce(pl.x, pl.y, _wf);
+      pl.vx += _wf[0] * 0.9;
+      pl.vy += _wf[1] * 0.9;
+      pl.x += pl.vx; pl.y += pl.vy;
+      pl.vx *= 0.97; pl.vy *= 0.97;
+      if (pl.gone || pl.age > 30) pellets.splice(pk, 1);
+    }
+
     // Every so often something touches the surface on its own.
     nextAmbient -= dt;
     if (nextAmbient <= 0) {
@@ -914,6 +1009,22 @@
     drawWakes();
     fish.forEach(drawFish);
     drawRipples();
+    for (var pk = 0; pk < pellets.length; pk++) {
+      var pl = pellets[pk];
+      var fade = pl.age > 26 ? (30 - pl.age) / 4 : 1;
+      ctx.beginPath();
+      ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.fillStyle = "#c98b3e";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(pl.x - pl.r * 0.3, pl.y - pl.r * 0.3, pl.r * 0.42, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.5 * fade;
+      ctx.fillStyle = "#f0c27a";
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     drawPads();          // floating on the surface, so over the fish
   }
 
@@ -974,8 +1085,36 @@
   readColors();
   resize();
 
+  /* Public API, used by the terminal's `feed` and `koi` commands. */
+  window.pond = {
+    feed: function (n, x, y) {
+      n = Math.max(1, Math.min(80, n | 0 || 18));
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var rad = Math.random() * (x == null ? Math.min(W, H) * 0.3 : 70);
+        pellets.push({
+          x: (x == null ? W * 0.5 : x) + Math.cos(a) * rad,
+          y: (y == null ? H * 0.45 : y) + Math.sin(a) * rad,
+          vx: Math.cos(a) * 0.25, vy: Math.sin(a) * 0.25,
+          r: 1.6 + Math.random() * 1.6,
+          age: 0, gone: false,
+        });
+      }
+      return n;
+    },
+    count: function () { return fish.length; },
+    pellets: function () { return pellets.length; },
+    splash: function (x, y) {
+      splash(x == null ? W * 0.5 : x, y == null ? H * 0.45 : y);
+    },
+  };
+
   // Test hook: off unless something sets the flag first.
-  if (window.__POND_DEBUG__) window.__pond = { fish: function () { return fish; } };
+  if (window.__POND_DEBUG__) window.__pond = {
+    fish: function () { return fish; },
+    pads: function () { return pads; },
+    weeds: function () { return weeds; },
+  };
 
   if (reduced) {
     for (var k = 0; k < 220; k++) step(0.016);   // let them spread out
