@@ -87,8 +87,11 @@
   function makeFish(pal, scale) {
     var f = {
       pal: pal,
-      len: 5.6 * scale,             // spacing between spine joints
-      girth: 3.1 * scale,
+      /* Body is 12 joints long, so length is 12*len and width is 2*girth.
+         Keep that ratio near 5:1 — at 10:1 they read as eels, which is
+         exactly what the first version looked like. */
+      len: 5.6 * scale,
+      girth: 8.6 * scale,
       speed: 0.42 + Math.random() * 0.3,
       base: 0.42 + Math.random() * 0.3,
       heading: Math.random() * Math.PI * 2,
@@ -195,7 +198,7 @@
     var d = Math.sqrt(dx * dx + dy * dy) || 1;
     var ux = dx / d, uy = dy / d;
     var nx = -uy, ny = ux;
-    var L = f.girth * 2.5, Wd = f.girth * 1.7;
+    var L = f.girth * 1.5, Wd = f.girth * 1.05;
     var tipx = b.x + ux * L, tipy = b.y + uy * L;
 
     ctx.beginPath();
@@ -227,7 +230,7 @@
       ctx.translate(p.x - (dy / d) * w * s * 0.5, p.y + (dx / d) * w * s * 0.5);
       ctx.rotate(ang + s * 0.85);
       ctx.beginPath();
-      ctx.ellipse(0, 0, f.girth * 1.5, f.girth * 0.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, f.girth * 0.85, f.girth * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
@@ -244,13 +247,13 @@
     ctx.fill();
     ctx.restore();
 
-    var fade = 0.55 + f.depth * 0.45;
+    var fade = 0.78 + f.depth * 0.22;
 
     drawTail(f, f.pal.body, 0.3 * fade);
     drawFins(f, f.pal.body, 0.35 * fade);
 
     fishPath(f);
-    ctx.globalAlpha = 0.9 * fade;
+    ctx.globalAlpha = 0.96 * fade;
     ctx.fillStyle = f.pal.body;
     ctx.fill();
 
@@ -264,11 +267,25 @@
       var idx = 1 + Math.floor(((s + 0.7) / (f.pal.spots + 0.4)) * (SEG - 4));
       var p = f.spine[idx];
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y, f.girth * (1.5 - s * 0.22), f.girth * 1.05,
+      ctx.ellipse(p.x, p.y, f.girth * (0.85 - s * 0.13), f.girth * 0.62,
                   f.phase * 0.02 + s, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
+
+    // Eyes. Small, but they're most of what makes a blob read as a fish.
+    var e = f.spine[2], ep = f.spine[1], en = f.spine[3];
+    var edx = en.x - ep.x, edy = en.y - ep.y;
+    var ed = Math.sqrt(edx * edx + edy * edy) || 1;
+    var enx = -edy / ed, eny = edx / ed;
+    var eo = widthAt(2, f) * 0.6, er = Math.max(0.6, f.girth * 0.15);
+    ctx.globalAlpha = 0.72 * fade;
+    ctx.fillStyle = "#17140f";
+    for (var q = -1; q <= 1; q += 2) {
+      ctx.beginPath();
+      ctx.arc(e.x + enx * eo * q, e.y + eny * eo * q, er, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.globalAlpha = 1;
   }
@@ -647,7 +664,7 @@
     var want = Math.max(6, Math.min(18, Math.round((W * H) / 92000)));
     var keep = fish.slice(0, want);
     while (keep.length < want) {
-      keep.push(makeFish(pals[keep.length % pals.length], 0.85 + Math.random() * 0.7));
+      keep.push(makeFish(pals[keep.length % pals.length], 0.72 + Math.random() * 0.5));
     }
     keep.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
     fish = keep;
