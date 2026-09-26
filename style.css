@@ -99,12 +99,12 @@ body::after {
   z-index: 3;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: clamp(2rem, 5vw, 4.5rem);
-  align-items: stretch;
+  gap: clamp(1.75rem, 4vw, 3.5rem);
+  align-items: center;
   height: 100dvh;
-  max-width: 96rem;
+  max-width: 78rem;
   margin: 0 auto;
-  padding: clamp(2rem, 6vh, 4rem) clamp(1.35rem, 5vw, 3.5rem);
+  padding: clamp(2rem, 7vh, 4.5rem) clamp(1.35rem, 4vw, 3rem);
 }
 
 .col { min-width: 0; min-height: 0; }
@@ -113,6 +113,7 @@ body::after {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  max-height: 88dvh;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -120,6 +121,13 @@ body::after {
 .col--intro::-webkit-scrollbar { display: none; }
 
 .col--term { display: flex; min-height: 0; }
+
+/* Bounded rather than full-height, so there's open water above and below it
+   instead of a floor-to-ceiling slab. */
+.term {
+  min-height: 19rem;
+  max-height: min(74dvh, 38rem);
+}
 
 /* The document exists only so ⌘P can lay out a résumé from the same data. */
 .doc { display: none; }
@@ -204,19 +212,19 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
    stay visible — blurred — straight through the page. */
 .col--intro,
 .term {
-  background: color-mix(in srgb, var(--bg) 80%, transparent);
-  -webkit-backdrop-filter: blur(13px) saturate(130%);
-          backdrop-filter: blur(13px) saturate(130%);
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  -webkit-backdrop-filter: blur(9px) saturate(135%);
+          backdrop-filter: blur(9px) saturate(135%);
   border: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
   border-radius: 10px;
 }
 
 .col--intro {
-  padding: clamp(1.75rem, 3.2vw, 3rem);
+  padding: clamp(1.6rem, 2.8vw, 2.5rem);
 }
 
 @supports not (backdrop-filter: blur(1px)) {
-  .col--intro, .term { background: color-mix(in srgb, var(--bg) 93%, transparent); }
+  .col--intro, .term { background: color-mix(in srgb, var(--bg) 90%, transparent); }
 }
 
 .masthead__name {
@@ -250,7 +258,7 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 }
 @keyframes draw { to { transform: scaleX(1); } }
 
-.intro { max-width: 34rem; color: var(--fg-soft); font-size: 1.02rem; }
+.intro { max-width: 34rem; color: var(--fg); font-size: 1.02rem; }
 .intro p { margin: 0 0 1.05rem; }
 .intro p:last-child { margin-bottom: 0; }
 .intro strong { color: var(--fg); font-weight: 500; }

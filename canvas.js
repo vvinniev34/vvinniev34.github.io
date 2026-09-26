@@ -102,6 +102,11 @@
       slow: slow,
       speed: cruise,
       base: cruise,
+      /* Hard ceiling on velocity, and a startle level that decays, so nothing
+         can change direction or speed instantaneously. Bigger fish have a
+         higher top speed but accelerate and turn more sluggishly. */
+      maxSpeed: 2.3 * (0.85 + scale * 0.3),
+      startle: 0,
       heading: Math.random() * Math.PI * 2,
       wander: Math.random() * Math.PI * 2,
       phase: Math.random() * Math.PI * 2,
@@ -133,17 +138,28 @@
     f.wander += (Math.random() - 0.5) * 0.22 * dt * 60;
     var ax = Math.cos(f.wander), ay = Math.sin(f.wander);
 
-    // Flee the cursor.
-    var fleeing = 0;
+    /* Flee the cursor.
+
+       Two separate responses, because one number couldn't do both jobs. With
+       a single linear falloff the force is ~0 at the edge of the radius, so
+       fish only visibly reacted once the cursor was on top of them.
+
+         notice — curved (pow 0.45), so it's already substantial far out.
+                  Drives turning and the shove: they veer away early.
+         panic  — stays linear, so the flat-out sprint is reserved for a
+                  cursor that's genuinely close. */
+    f.startle *= Math.max(0, 1 - dt * 1.25);
+
+    var fleeing = 0, panic = 0;
     if (mouse.on) {
       var dx = head.x - mouse.x, dy = head.y - mouse.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
-      var reach = 300 + mouse.vel * 90;      // a fast cursor is noticed sooner
+      var reach = 460 + mouse.vel * 150;     // a fast cursor is noticed sooner
       if (d < reach) {
-        fleeing = (reach - d) / reach;
-        fleeing = fleeing * (0.75 + mouse.vel * 0.65);
-        if (fleeing > 1) fleeing = 1;
-        var shove = 5.2 * fleeing;
+        var lin = (reach - d) / reach;
+        fleeing = Math.min(1, Math.pow(lin, 0.45) * (0.82 + mouse.vel * 0.5));
+        panic = Math.min(1, lin * 1.5 * (0.8 + mouse.vel * 0.55));
+        var shove = 5.6 * fleeing;
         ax += (dx / d) * shove;
         ay += (dy / d) * shove;
       }
@@ -158,6 +174,10 @@
     if (head.y < m)          ay += (1 - head.y / m) * 2.6;
     else if (head.y > H - m) ay -= (1 - (H - head.y) / m) * 2.6;
 
+    // A recent splash counts as fear too, and fades out on its own.
+    if (f.startle > fleeing) fleeing = f.startle;
+    if (f.startle > panic) panic = f.startle;
+
     var desired = Math.atan2(ay, ax);
 
     /* Turn toward the desired heading by the short way round, but cap how
@@ -165,7 +185,7 @@
        ~15° a frame and the body had to follow in a hairpin. */
     var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
     var turn = diff * (0.035 + fleeing * 0.22) * dt * 60;
-    var maxTurn = (0.045 + fleeing * 0.13) * dt * 60;
+    var maxTurn = (0.028 + fleeing * 0.05) * Math.min(f.slow, 1.15) * dt * 60;
     if (turn > maxTurn) turn = maxTurn;
     else if (turn < -maxTurn) turn = -maxTurn;
     f.heading += turn;
@@ -174,7 +194,17 @@
     f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * f.slow * dt * 60;
     var swim = f.heading + Math.sin(f.phase) * 0.14 * f.wag;
 
-    f.speed += ((f.base + fleeing * 4.6) - f.speed) * 0.14 * dt * 60;
+    /* Rate-limited acceleration rather than an exponential snap, then a hard
+       clamp. Speeding up is slower than slowing down, which is how a fish
+       actually behaves. */
+    var want = f.base + panic * (f.maxSpeed - f.base);
+    var dv = want - f.speed;
+    var cap = (dv > 0 ? 0.045 : 0.07) * Math.min(f.slow, 1.2) * dt * 60;
+    if (dv > cap) dv = cap;
+    else if (dv < -cap) dv = -cap;
+    f.speed += dv;
+    if (f.speed > f.maxSpeed) f.speed = f.maxSpeed;
+    else if (f.speed < 0.08) f.speed = 0.08;
 
     head.x += Math.cos(swim) * f.speed * dt * 60;
     head.y += Math.sin(swim) * f.speed * dt * 60;
@@ -552,13 +582,16 @@
     // click feel like it hit water rather than just starting an animation.
     bursts.push({ x: x, y: y, age: 0, life: 0.42, r: 34 });
 
-    // A crown of short radial streaks thrown up by the impact.
-    for (var c = 0; c < 14; c++) {
-      var ca = (c / 14) * Math.PI * 2 + Math.random() * 0.3;
+    /* Throwback spray. Angles are fully random, not evenly spaced — an even
+       ring of identical spokes reads as a clock face, not a splash. */
+    var nc = 7 + (Math.random() * 4 | 0);
+    for (var c = 0; c < nc; c++) {
       crowns.push({
-        x: x, y: y, a: ca,
-        len: 13 + Math.random() * 20,
-        age: 0, life: 0.34 + Math.random() * 0.16,
+        x: x, y: y,
+        a: Math.random() * Math.PI * 2,
+        len: 7 + Math.random() * Math.random() * 30,   // mostly short, few long
+        speed: 0.7 + Math.random() * 0.8,
+        age: 0, life: 0.2 + Math.random() * 0.22,
       });
     }
 
@@ -579,9 +612,11 @@
       var dx = h.x - x, dy = h.y - y;
       var d = Math.sqrt(dx * dx + dy * dy);
       if (d < 360) {
-        f.heading = Math.atan2(dy, dx);
-        f.wander = f.heading;
-        f.speed = 5.2 * (1 - d / 360) + 1.1;
+        // Point them away and frighten them; the steering and acceleration
+        // limits above decide how fast they can actually respond.
+        f.wander = Math.atan2(dy, dx);
+        var k = 1 - d / 360;
+        if (k > f.startle) f.startle = k;
       }
     });
   }
@@ -643,23 +678,23 @@
       var r = bu.r * (0.35 + k * 1.9);
       var g = ctx.createRadialGradient(bu.x, bu.y, 0, bu.x, bu.y, r);
       g.addColorStop(0, C.light);
-      g.addColorStop(0.55, C.light);
+      g.addColorStop(0.35, C.light);
       g.addColorStop(1, "transparent");
-      ctx.globalAlpha = (1 - k) * (1 - k) * 0.85;
+      ctx.globalAlpha = (1 - k) * (1 - k) * 0.7;
       ctx.fillStyle = g;
       ctx.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
     });
 
     crowns.forEach(function (cr) {
       var k = cr.age / cr.life;
-      var r0 = 6 + k * cr.len;
-      var r1 = r0 + cr.len * (1 - k) * 0.55;
+      var r0 = 4 + k * cr.len * cr.speed * 2.1;   // travels out with the rings
+      var r1 = r0 + cr.len * (1 - k) * 0.42;
       ctx.beginPath();
       ctx.moveTo(cr.x + Math.cos(cr.a) * r0, cr.y + Math.sin(cr.a) * r0);
       ctx.lineTo(cr.x + Math.cos(cr.a) * r1, cr.y + Math.sin(cr.a) * r1);
       ctx.strokeStyle = C.light;
-      ctx.globalAlpha = (1 - k) * 0.7;
-      ctx.lineWidth = 2.1 * (1 - k) + 0.4;
+      ctx.globalAlpha = (1 - k) * (1 - k) * 0.6;
+      ctx.lineWidth = 1.7 * (1 - k) + 0.3;
       ctx.stroke();
     });
 
