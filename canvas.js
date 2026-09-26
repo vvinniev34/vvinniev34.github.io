@@ -30,8 +30,8 @@
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var W = 0, H = 0, dpr = 1, t = 0;
-  var fish = [], ripples = [], drops = [];
-  var mouse = { x: -9999, y: -9999, on: false };
+  var fish = [], ripples = [], drops = [], bursts = [], crowns = [];
+  var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0 };
   var running = false, raf = null, nextAmbient = 3;
 
   /* ---- palette ------------------------------------------------------------ */
@@ -118,10 +118,12 @@
   }
 
   function widthAt(i, f) {
-    // 0 = nose, 1 = tail tip. Widest just behind the head.
+    /* 0 = nose, 1 = tail. Widest just behind the head. The trailing term
+       keeps a real caudal peduncle — with a pure sine the body narrowed to
+       nothing and the tail fin appeared to float free of the fish. */
     var u = i / (SEG - 1);
-    var w = Math.sin(Math.pow(u, 0.62) * Math.PI) * f.girth;
-    return Math.max(0.6, w * (1 - u * 0.45));
+    var w = Math.sin(Math.pow(u, 0.6) * Math.PI) * 0.84 + 0.16 * (1 - u * 0.45);
+    return Math.max(0.8, w * f.girth * (1 - u * 0.3));
   }
 
   function updateFish(f, dt) {
@@ -136,10 +138,14 @@
     if (mouse.on) {
       var dx = head.x - mouse.x, dy = head.y - mouse.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
-      if (d < 240) {
-        fleeing = (240 - d) / 240;
-        ax += (dx / d) * fleeing * 3.2;
-        ay += (dy / d) * fleeing * 3.2;
+      var reach = 300 + mouse.vel * 90;      // a fast cursor is noticed sooner
+      if (d < reach) {
+        fleeing = (reach - d) / reach;
+        fleeing = fleeing * (0.75 + mouse.vel * 0.65);
+        if (fleeing > 1) fleeing = 1;
+        var shove = 5.2 * fleeing;
+        ax += (dx / d) * shove;
+        ay += (dy / d) * shove;
       }
     }
 
@@ -159,7 +165,7 @@
        ~15° a frame and the body had to follow in a hairpin. */
     var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
     var turn = diff * (0.035 + fleeing * 0.22) * dt * 60;
-    var maxTurn = (0.045 + fleeing * 0.05) * dt * 60;
+    var maxTurn = (0.045 + fleeing * 0.13) * dt * 60;
     if (turn > maxTurn) turn = maxTurn;
     else if (turn < -maxTurn) turn = -maxTurn;
     f.heading += turn;
@@ -168,7 +174,7 @@
     f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * f.slow * dt * 60;
     var swim = f.heading + Math.sin(f.phase) * 0.14 * f.wag;
 
-    f.speed += ((f.base + fleeing * 3.0) - f.speed) * 0.09 * dt * 60;
+    f.speed += ((f.base + fleeing * 4.6) - f.speed) * 0.14 * dt * 60;
 
     head.x += Math.cos(swim) * f.speed * dt * 60;
     head.y += Math.sin(swim) * f.speed * dt * 60;
@@ -227,7 +233,7 @@
     var d = Math.sqrt(dx * dx + dy * dy) || 1;
     var ux = dx / d, uy = dy / d;
     var nx = -uy, ny = ux;
-    var L = f.girth * 1.15, Wd = f.girth * 0.72;
+    var L = f.girth * 1.05, Wd = f.girth * 0.58;
     var tipx = b.x + ux * L, tipy = b.y + uy * L;
 
     ctx.beginPath();
@@ -438,13 +444,13 @@
   var pads = [];
 
   function makePads() {
-    var n = Math.max(2, Math.min(7, Math.round((W * H) / 300000)));
+    var n = Math.max(4, Math.min(12, Math.round((W * H) / 165000)));
     pads = [];
     for (var i = 0; i < n; i++) {
       pads.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        r: 15 + Math.random() * 20,
+        r: 27 + Math.random() * 30,
         rot: Math.random() * Math.PI * 2,
         phase: Math.random() * Math.PI * 2,
         flower: Math.random() < 0.34,
@@ -467,7 +473,7 @@
       ctx.moveTo(5, 7);
       ctx.arc(5, 7, p.r, 0.2, Math.PI * 2 - 0.2);
       ctx.closePath();
-      ctx.globalAlpha = 0.16;
+      ctx.globalAlpha = 0.22;
       ctx.fillStyle = "#03120d";
       ctx.fill();
 
@@ -476,18 +482,26 @@
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, p.r, 0.2, Math.PI * 2 - 0.2);
       ctx.closePath();
-      ctx.globalAlpha = 0.92;
+      ctx.globalAlpha = 1;
       ctx.fillStyle = C.pad;
       ctx.fill();
-      ctx.globalAlpha = 0.5;
+      // A lighter inner sheen plus a darker edge, so the pad has a surface
+      // instead of being a flat disc.
+      var sheen = ctx.createRadialGradient(-p.r * 0.3, -p.r * 0.3, 0, 0, 0, p.r);
+      sheen.addColorStop(0, C.padRim);
+      sheen.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = sheen;
+      ctx.fill();
+      ctx.globalAlpha = 0.85;
       ctx.strokeStyle = C.padRim;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
 
       // veins
-      ctx.globalAlpha = 0.22;
+      ctx.globalAlpha = 0.3;
       ctx.strokeStyle = C.padRim;
-      ctx.lineWidth = 0.8;
+      ctx.lineWidth = 0.9;
       for (var v = 0; v < 7; v++) {
         var a = 0.6 + (v / 6) * (Math.PI * 2 - 1.2);
         ctx.beginPath();
@@ -528,30 +542,46 @@
   }
 
   function splash(x, y) {
-    addRipple(x, y, 120, 0,    1);
-    addRipple(x, y, 82,  0.09, 0.75);
-    addRipple(x, y, 48,  0.18, 0.5);
+    // Four rings staggered outward, the leading one much wider than before.
+    addRipple(x, y, 230, 0,    1.35);
+    addRipple(x, y, 165, 0.07, 1.05);
+    addRipple(x, y, 105, 0.15, 0.8);
+    addRipple(x, y, 58,  0.24, 0.55);
 
-    for (var i = 0; i < 12; i++) {
-      var a = Math.random() * Math.PI * 2;
-      var sp = 1.6 + Math.random() * 3.4;
-      drops.push({
-        x: x, y: y,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        r: 1 + Math.random() * 2.2,
-        life: 0.42 + Math.random() * 0.4, age: 0,
+    // The white burst at the point of impact — this is most of what makes a
+    // click feel like it hit water rather than just starting an animation.
+    bursts.push({ x: x, y: y, age: 0, life: 0.42, r: 34 });
+
+    // A crown of short radial streaks thrown up by the impact.
+    for (var c = 0; c < 14; c++) {
+      var ca = (c / 14) * Math.PI * 2 + Math.random() * 0.3;
+      crowns.push({
+        x: x, y: y, a: ca,
+        len: 13 + Math.random() * 20,
+        age: 0, life: 0.34 + Math.random() * 0.16,
       });
     }
 
-    // Everything nearby bolts.
+    for (var i = 0; i < 26; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var sp = 2.4 + Math.random() * 6.2;
+      drops.push({
+        x: x, y: y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        r: 1.2 + Math.random() * 3.2,
+        life: 0.45 + Math.random() * 0.5, age: 0,
+      });
+    }
+
+    // Everything nearby bolts, harder and from further out.
     fish.forEach(function (f) {
       var h = f.spine[0];
       var dx = h.x - x, dy = h.y - y;
       var d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 260) {
+      if (d < 360) {
         f.heading = Math.atan2(dy, dx);
         f.wander = f.heading;
-        f.speed = 3.4 * (1 - d / 260) + 0.8;
+        f.speed = 5.2 * (1 - d / 360) + 1.1;
       }
     });
   }
@@ -563,6 +593,14 @@
       rp.life += dt;
       rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / 1.5), 2.2));
       if (rp.life > 1.5) ripples.splice(i, 1);
+    }
+    for (var b = bursts.length - 1; b >= 0; b--) {
+      bursts[b].age += dt;
+      if (bursts[b].age >= bursts[b].life) bursts.splice(b, 1);
+    }
+    for (var c = crowns.length - 1; c >= 0; c--) {
+      crowns[c].age += dt;
+      if (crowns[c].age >= crowns[c].life) crowns.splice(c, 1);
     }
     for (var j = drops.length - 1; j >= 0; j--) {
       var d = drops[j];
@@ -581,14 +619,14 @@
     ripples.forEach(function (rp) {
       if (rp.delay > 0) return;
       var k = Math.min(1, rp.life / 1.5);
-      var a = (1 - k) * (1 - k) * 0.5 * rp.weight;
+      var a = (1 - k) * (1 - k) * 0.78 * rp.weight;
       if (a <= 0.004) return;
 
       ctx.beginPath();
       ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
       ctx.strokeStyle = C.light;
       ctx.globalAlpha = a;
-      ctx.lineWidth = 1.6 * rp.weight * (1 - k * 0.5);
+      ctx.lineWidth = 2.6 * rp.weight * (1 - k * 0.45);
       ctx.stroke();
 
       // A darker trailing ring gives the crest some relief.
@@ -597,6 +635,31 @@
       ctx.strokeStyle = C.deep;
       ctx.globalAlpha = a * 0.5;
       ctx.lineWidth = 1.1 * rp.weight;
+      ctx.stroke();
+    });
+
+    bursts.forEach(function (bu) {
+      var k = bu.age / bu.life;
+      var r = bu.r * (0.35 + k * 1.9);
+      var g = ctx.createRadialGradient(bu.x, bu.y, 0, bu.x, bu.y, r);
+      g.addColorStop(0, C.light);
+      g.addColorStop(0.55, C.light);
+      g.addColorStop(1, "transparent");
+      ctx.globalAlpha = (1 - k) * (1 - k) * 0.85;
+      ctx.fillStyle = g;
+      ctx.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
+    });
+
+    crowns.forEach(function (cr) {
+      var k = cr.age / cr.life;
+      var r0 = 6 + k * cr.len;
+      var r1 = r0 + cr.len * (1 - k) * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(cr.x + Math.cos(cr.a) * r0, cr.y + Math.sin(cr.a) * r0);
+      ctx.lineTo(cr.x + Math.cos(cr.a) * r1, cr.y + Math.sin(cr.a) * r1);
+      ctx.strokeStyle = C.light;
+      ctx.globalAlpha = (1 - k) * 0.7;
+      ctx.lineWidth = 2.1 * (1 - k) + 0.4;
       ctx.stroke();
     });
 
@@ -630,6 +693,7 @@
 
   function step(dt) {
     t += dt;
+    mouse.vel *= Math.max(0, 1 - dt * 2.4);
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
 
@@ -723,6 +787,11 @@
   // The canvas is fixed to the viewport, so client coordinates are already
   // pond coordinates — no offset maths, and no recalculating on scroll.
   window.addEventListener("pointermove", function (e) {
+    if (mouse.on) {
+      var mdx = e.clientX - mouse.x, mdy = e.clientY - mouse.y;
+      // Smoothed, so one stray jump doesn't spook the whole pond.
+      mouse.vel += (Math.min(1, Math.sqrt(mdx * mdx + mdy * mdy) / 26) - mouse.vel) * 0.35;
+    }
     mouse.x = e.clientX;
     mouse.y = e.clientY;
     mouse.on = true;
