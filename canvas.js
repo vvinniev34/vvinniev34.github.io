@@ -85,21 +85,29 @@
   var SEG = 13;
 
   function makeFish(pal, scale) {
+    /* Bigger fish beat their tails more slowly and cruise a little less
+       briskly. Without this every koi swims identically and the size
+       variation stops reading as size — it just looks like a zoom level. */
+    var slow = 1 / Math.sqrt(scale);
+    var cruise = (0.38 + Math.random() * 0.26) * (1.22 - scale * 0.2);
+
     var f = {
       pal: pal,
+      scale: scale,
       /* Body is 12 joints long, so length is 12*len and width is 2*girth.
          Keep that ratio near 5:1 — at 10:1 they read as eels, which is
          exactly what the first version looked like. */
       len: 5.6 * scale,
       girth: 8.6 * scale,
-      speed: 0.42 + Math.random() * 0.3,
-      base: 0.42 + Math.random() * 0.3,
+      slow: slow,
+      speed: cruise,
+      base: cruise,
       heading: Math.random() * Math.PI * 2,
       wander: Math.random() * Math.PI * 2,
       phase: Math.random() * Math.PI * 2,
       wag: 0.9 + Math.random() * 0.5,
       spine: [],
-      depth: 0.55 + Math.random() * 0.45,   // how far under the surface
+      depth: Math.min(1, 0.45 + Math.random() * 0.4 + (scale - 1) * 0.12),
     };
     var x = Math.random() * W, y = Math.random() * H;
     for (var i = 0; i < SEG; i++) {
@@ -157,7 +165,7 @@
     f.heading += turn;
 
     // Tail beat — faster when startled. This wiggle is what drives the body.
-    f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * dt * 60;
+    f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * f.slow * dt * 60;
     var swim = f.heading + Math.sin(f.phase) * 0.14 * f.wag;
 
     f.speed += ((f.base + fleeing * 3.0) - f.speed) * 0.09 * dt * 60;
@@ -214,12 +222,12 @@
 
   function drawTail(f, color, alpha) {
     // A flared, translucent caudal fin trailing the last few joints.
-    var a = f.spine[SEG - 3], b = f.spine[SEG - 1];
+    var a = f.spine[SEG - 3], b = f.spine[SEG - 2];
     var dx = b.x - a.x, dy = b.y - a.y;
     var d = Math.sqrt(dx * dx + dy * dy) || 1;
     var ux = dx / d, uy = dy / d;
     var nx = -uy, ny = ux;
-    var L = f.girth * 1.5, Wd = f.girth * 1.05;
+    var L = f.girth * 1.15, Wd = f.girth * 0.72;
     var tipx = b.x + ux * L, tipy = b.y + uy * L;
 
     ctx.beginPath();
@@ -251,7 +259,7 @@
       ctx.translate(p.x - (dy / d) * w * s * 0.5, p.y + (dx / d) * w * s * 0.5);
       ctx.rotate(ang + s * 0.85);
       ctx.beginPath();
-      ctx.ellipse(0, 0, f.girth * 0.85, f.girth * 0.3, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, f.girth * 0.6, f.girth * 0.22, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
@@ -259,7 +267,7 @@
 
   function drawFish(f) {
     // Shadow on the pond floor, offset by how deep the fish is swimming.
-    var off = 5 + f.depth * 7;
+    var off = f.girth * (0.3 + f.depth * 0.45);
     ctx.save();
     ctx.translate(off, off * 1.15);
     fishPath(f);
@@ -270,8 +278,8 @@
 
     var fade = 0.78 + f.depth * 0.22;
 
-    drawTail(f, f.pal.body, 0.3 * fade);
-    drawFins(f, f.pal.body, 0.35 * fade);
+    drawTail(f, f.pal.body, 0.55 * fade);
+    drawFins(f, f.pal.body, 0.48 * fade);
 
     fishPath(f);
     ctx.globalAlpha = 0.96 * fade;
@@ -345,13 +353,13 @@
   function renderCaustics() {
     var d = cImg.data, k = 0;
     var t1 = t * 0.55, t2 = t * 0.42, t3 = t * 0.70, t4 = t * 0.90;
-    var cx = 4.5, cy = 3.0;
+    var cx = 9.0, cy = 6.5;
 
     for (var y = 0; y < CH; y++) {
-      var ny = (y / CH) * 6.0;
+      var ny = (y / CH) * 13.0;
       var dy = ny - cy;
       for (var x = 0; x < CW; x++, k++) {
-        var nx = (x / CW) * 9.0;
+        var nx = (x / CW) * 18.0;
         var dx = nx - cx;
         var v = Math.sin(nx + t1)
               + Math.sin(ny * 1.13 - t2)
@@ -436,7 +444,7 @@
       pads.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        r: 20 + Math.random() * 26,
+        r: 15 + Math.random() * 20,
         rot: Math.random() * Math.PI * 2,
         phase: Math.random() * Math.PI * 2,
         flower: Math.random() < 0.34,
@@ -457,7 +465,7 @@
       // shadow cast down onto the floor
       ctx.beginPath();
       ctx.moveTo(5, 7);
-      ctx.arc(5, 7, p.r, 0.42, Math.PI * 2 - 0.42);
+      ctx.arc(5, 7, p.r, 0.2, Math.PI * 2 - 0.2);
       ctx.closePath();
       ctx.globalAlpha = 0.16;
       ctx.fillStyle = "#03120d";
@@ -466,7 +474,7 @@
       // the pad itself, with its characteristic notch
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.arc(0, 0, p.r, 0.42, Math.PI * 2 - 0.42);
+      ctx.arc(0, 0, p.r, 0.2, Math.PI * 2 - 0.2);
       ctx.closePath();
       ctx.globalAlpha = 0.92;
       ctx.fillStyle = C.pad;
@@ -685,7 +693,9 @@
     var want = Math.max(10, Math.min(34, Math.round((W * H) / 48000)));
     var keep = fish.slice(0, want);
     while (keep.length < want) {
-      keep.push(makeFish(pals[keep.length % pals.length], 0.72 + Math.random() * 0.5));
+      // Skewed: mostly young fish, the big old ones rare.
+      var sc = 0.45 + Math.pow(Math.random(), 1.9) * 1.75;
+      keep.push(makeFish(pals[keep.length % pals.length], sc));
     }
     keep.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
     fish = keep;

@@ -30,7 +30,7 @@ html[data-theme="light"] {
   --pond-light: rgba(238, 255, 247, 0.8);
   --caustic:    236, 255, 246;   /* raw rgb — the light web on the bottom */
   --silt:       #4a6b60;   /* mottling on the pond floor */
-  --pad:        #5d8f6b;   /* lily pads */
+  --pad:        #4e8560;   /* lily pads */
   --pad-rim:    #7fb287;
   --lotus:      #f6e3ea;
   --koi-cream:  #fdfaf4;
