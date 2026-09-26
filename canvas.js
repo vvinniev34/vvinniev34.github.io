@@ -47,6 +47,8 @@
     C.pond      = v("--pond", "#e9efec");
     C.deep      = v("--pond-deep", "#d4e0db");
     C.light     = v("--pond-light", "rgba(255,255,255,.55)");
+    C.wave      = v("--wave", "rgba(255,255,255,.95)");
+    C.waveDark  = v("--wave-dark", "rgba(46,88,76,.5)");
     C.accent    = v("--accent", "#b4451f");
     C.cream     = v("--koi-cream", "#fdfaf4");
     C.dark      = v("--koi-dark", "#2c2a26");
@@ -1112,10 +1114,13 @@
         if (open) ctx.stroke();
       }
 
-      ring(rp.r, a, 2.6 * rp.weight * (1 - k * 0.45), C.light);
-      // A darker trailing ring gives the crest some relief — worth it only
-      // on the bigger rings.
-      if (rp.r > 34) ring(rp.r * 0.88, a * 0.5, 1.1 * rp.weight, C.deep);
+      /* Trough behind, crest in front. The pair is what makes a ring read as
+         a raised ridge of water; a single pale line disappears into the
+         caustics and is erased entirely by the panels' backdrop blur. */
+      var lw = (3.4 * rp.weight + 0.8) * (1 - k * 0.4);
+      ring(rp.r * 1.03, a * 0.75, lw * 0.9, C.waveDark);
+      ring(rp.r, a, lw, C.wave);
+      if (rp.r > 34) ring(rp.r * 0.86, a * 0.4, lw * 0.5, C.waveDark);
     });
 
     bursts.forEach(function (bu) {
@@ -1198,7 +1203,7 @@
         addRipple(mouse.x, mouse.y,
                   18 + mouse.vel * 52,           // faster cursor, wider ring
                   0,
-                  0.18 + mouse.vel * 0.34,
+                  0.3 + mouse.vel * 0.45,
                   0.05 + mouse.vel * 0.28);      // and a little deeper
       }
     }

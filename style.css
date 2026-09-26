@@ -28,6 +28,8 @@ html[data-theme="light"] {
   --pond:       #a8c9bd;   /* shallow water */
   --pond-deep:  #5f8b81;   /* depth at the edges */
   --pond-light: rgba(238, 255, 247, 0.8);
+  --wave:       rgba(255, 255, 255, 0.98);   /* ripple crest */
+  --wave-dark:  rgba(46, 88, 76, 0.5);       /* its trough */
   --caustic:    236, 255, 246;   /* raw rgb — the light web on the bottom */
   --silt:       #4a6b60;   /* mottling on the pond floor */
   --stone:      #6d8178;   /* pebbles on the bottom */
@@ -54,6 +56,8 @@ html[data-theme="dark"] {
   --pond:       #103832;   /* shallow water */
   --pond-deep:  #05191b;   /* depth at the edges */
   --pond-light: rgba(130, 235, 212, 0.34);
+  --wave:       rgba(205, 255, 243, 0.92);   /* ripple crest */
+  --wave-dark:  rgba(0, 16, 14, 0.72);       /* its trough */
   --caustic:    134, 240, 214;   /* raw rgb — the light web on the bottom */
   --silt:       #04100f;   /* mottling on the pond floor */
   --stone:      #40736a;   /* pebbles on the bottom */
@@ -239,8 +243,8 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 .col--intro,
 .term {
   background: color-mix(in srgb, var(--bg) 68%, transparent);
-  -webkit-backdrop-filter: blur(9px) saturate(135%);
-          backdrop-filter: blur(9px) saturate(135%);
+  -webkit-backdrop-filter: blur(5px) saturate(135%);
+          backdrop-filter: blur(5px) saturate(135%);
   border: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
   border-radius: 10px;
 }
