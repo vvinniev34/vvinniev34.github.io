@@ -681,7 +681,7 @@
       for (var ri = 0; ri < ripples.length && done < 5; ri++) {
         var rf = ripples[ri];
         if (rf.delay > 0 || rf.r < 46) continue;
-        var rk = Math.min(1, rf.life / 1.5);
+        var rk = Math.min(1, rf.life / RIPPLE_LIFE);
         var strength = (1 - rk) * (1 - rk) * rf.weight;
         if (strength < 0.08) continue;
         done++;
@@ -874,7 +874,7 @@
          nudges and a big splash ring shoves. Without this every ring pushed
          the same and a click felt no heavier than a mouse sweep. */
       var amp = Math.min(1.7, rp.max / 120);
-      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight * reach * amp;
+      var k = (1 - band / width) * (1 - rp.life / RIPPLE_LIFE) * rp.weight * reach * amp;
       out[0] += (dx / d) * k;
       out[1] += (dy / d) * k;
     }
@@ -892,6 +892,11 @@
      those stay on the cheap smooth path. */
 
   var RN = 36;
+
+  /* How long a ring lives. Was 1.5s with a (1-k)^2 fade, which meant a ring
+     was effectively invisible past ~40% of its life — so everything that
+     disturbed one was happening to a ring nobody could see. */
+  var RIPPLE_LIFE = 2.8;
 
   function ensureDeform(rp) {
     if (rp.def) return;
@@ -935,7 +940,7 @@
       if (!rp.def) continue;
 
       // the dent travels around the crest and flattens out; the tear heals
-      var spread = 0.2, damp = 1 - dt * 2.2, heal = 1 - dt * 1.5;
+      var spread = 0.2, damp = 1 - dt * 1.1, heal = 1 - dt * 0.8;
       for (var k = 0; k < RN; k++) {
         var prev = rp.def[(k - 1 + RN) % RN], next = rp.def[(k + 1) % RN];
         rp.tmp[k] = rp.def[k] + (prev + next - 2 * rp.def[k]) * spread;
@@ -1003,8 +1008,8 @@
       var rp = ripples[i];
       if (rp.delay > 0) { rp.delay -= dt; continue; }
       rp.life += dt;
-      rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / 1.5), 2.2));
-      if (rp.life > 1.5) ripples.splice(i, 1);
+      rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / RIPPLE_LIFE), 2.2));
+      if (rp.life > RIPPLE_LIFE) ripples.splice(i, 1);
     }
     for (var b = bursts.length - 1; b >= 0; b--) {
       bursts[b].age += dt;
@@ -1030,8 +1035,10 @@
     ctx.lineCap = "round";
     ripples.forEach(function (rp) {
       if (rp.delay > 0) return;
-      var k = Math.min(1, rp.life / 1.5);
-      var a = (1 - k) * (1 - k) * 0.78 * rp.weight;
+      var k = Math.min(1, rp.life / RIPPLE_LIFE);
+      // Gentler fade curve, so a ring stays legible for most of its life
+      // and there is actually something on screen to disturb.
+      var a = Math.pow(1 - k, 1.25) * 0.74 * rp.weight;
       if (a <= 0.004) return;
 
       /* An expanding circle reads as a graphic; a real wavefront buckles as
