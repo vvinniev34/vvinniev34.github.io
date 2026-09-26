@@ -146,9 +146,15 @@
 
     var desired = Math.atan2(ay, ax);
 
-    // Turn toward the desired heading by the short way round.
+    /* Turn toward the desired heading by the short way round, but cap how
+       fast the head may swing. Uncapped, a startled fish whipped through
+       ~15° a frame and the body had to follow in a hairpin. */
     var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
-    f.heading += diff * (0.035 + fleeing * 0.22) * dt * 60;
+    var turn = diff * (0.035 + fleeing * 0.22) * dt * 60;
+    var maxTurn = (0.045 + fleeing * 0.05) * dt * 60;
+    if (turn > maxTurn) turn = maxTurn;
+    else if (turn < -maxTurn) turn = -maxTurn;
+    f.heading += turn;
 
     // Tail beat — faster when startled. This wiggle is what drives the body.
     f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * dt * 60;
@@ -159,13 +165,28 @@
     head.x += Math.cos(swim) * f.speed * dt * 60;
     head.y += Math.sin(swim) * f.speed * dt * 60;
 
-    // Each joint follows the one ahead at a fixed distance.
+    /* Each joint follows the one ahead at a fixed distance AND may only bend
+       so far relative to the joint before it. Distance alone lets the chain
+       fold straight back through itself, which is how the fish ended up tying
+       themselves in knots. Capping the per-joint bend gives the body a spine
+       instead of a rope: 12 joints x 0.17rad allows a ~117 degree arc, enough
+       for a graceful turn, not enough to touch its own tail. */
+    var MAX_BEND = 0.17;
     for (var i = 1; i < SEG; i++) {
       var a = f.spine[i - 1], b = f.spine[i];
-      var vx = b.x - a.x, vy = b.y - a.y;
-      var dist = Math.sqrt(vx * vx + vy * vy) || 1;
-      b.x = a.x + (vx / dist) * f.len;
-      b.y = a.y + (vy / dist) * f.len;
+      var ang = Math.atan2(b.y - a.y, b.x - a.x);
+
+      if (i >= 2) {
+        var p2 = f.spine[i - 2];
+        var ref = Math.atan2(a.y - p2.y, a.x - p2.x);
+        var dv = Math.atan2(Math.sin(ang - ref), Math.cos(ang - ref));
+        if (dv > MAX_BEND) dv = MAX_BEND;
+        else if (dv < -MAX_BEND) dv = -MAX_BEND;
+        ang = ref + dv;
+      }
+
+      b.x = a.x + Math.cos(ang) * f.len;
+      b.y = a.y + Math.sin(ang) * f.len;
     }
   }
 
@@ -661,7 +682,7 @@
 
   function stock() {
     var pals = palettes();
-    var want = Math.max(6, Math.min(18, Math.round((W * H) / 92000)));
+    var want = Math.max(10, Math.min(34, Math.round((W * H) / 48000)));
     var keep = fish.slice(0, want);
     while (keep.length < want) {
       keep.push(makeFish(pals[keep.length % pals.length], 0.72 + Math.random() * 0.5));
@@ -672,6 +693,9 @@
 
   readColors();
   resize();
+
+  // Test hook: off unless something sets the flag first.
+  if (window.__POND_DEBUG__) window.__pond = { fish: function () { return fish; } };
 
   if (reduced) {
     for (var k = 0; k < 220; k++) step(0.016);   // let them spread out
