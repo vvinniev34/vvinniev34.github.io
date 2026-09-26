@@ -33,7 +33,7 @@
   var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0 };
   var running = false, raf = null, nextAmbient = 3;
-  var wakeTravel = 0;   // distance the cursor has covered since the last wake ring
+  var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
 
   /* ---- palette ------------------------------------------------------------ */
 
@@ -611,6 +611,28 @@
     ctx.globalAlpha = 1;
   }
 
+  /* The drifting colour bands on the surface. Factored out so a passing
+     wavefront can redraw them distorted inside its own annulus — otherwise
+     the shifting colours slide along underneath the rings, completely
+     indifferent to them. `x0..h` bounds the fill so the per-ripple redraws
+     only touch the ring, not the whole canvas. */
+  function sheenBands(x0, y0, w, h) {
+    for (var sgi = 0; sgi < 2; sgi++) {
+      var ang = 0.5 + sgi * 0.35;
+      var off = ((t * (0.035 + sgi * 0.02) + sgi * 0.5) % 1.6) - 0.3;
+      var sx = W * off, sy = H * (off * 0.4);
+      var sg = ctx.createLinearGradient(sx, sy,
+                                        sx + Math.cos(ang) * W * 0.55,
+                                        sy + Math.sin(ang) * H * 0.9);
+      sg.addColorStop(0, "transparent");
+      sg.addColorStop(0.5, C.light);
+      sg.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = sg;
+      ctx.fillRect(x0, y0, w, h);
+    }
+  }
+
   function drawWater() {
     if (!baseGrad) {
       baseGrad = ctx.createRadialGradient(W * 0.45, H * 0.42, Math.min(W, H) * 0.05,
@@ -648,22 +670,47 @@
       ctx.restore();
     }
 
-    /* Surface sheen: two very soft bands drifting across, which is what stops
-       the water reading as a flat tinted pane. */
-    for (var sgi = 0; sgi < 2; sgi++) {
-      var ang = 0.5 + sgi * 0.35;
-      var off = ((t * (0.035 + sgi * 0.02) + sgi * 0.5) % 1.6) - 0.3;
-      var sx = W * off, sy = H * (off * 0.4);
-      var sg = ctx.createLinearGradient(sx, sy,
-                                        sx + Math.cos(ang) * W * 0.55,
-                                        sy + Math.sin(ang) * H * 0.9);
-      sg.addColorStop(0, "transparent");
-      sg.addColorStop(0.5, C.light);
-      sg.addColorStop(1, "transparent");
-      ctx.globalAlpha = 0.16;
-      ctx.fillStyle = sg;
-      ctx.fillRect(0, 0, W, H);
+    /* Ripples bend the light web they pass over. Inside each wavefront's
+       annulus the caustic texture is redrawn magnified about the ripple's
+       centre, which reads as refraction — without this the rings floated
+       over an undisturbed pattern and looked like decals. Limited to the
+       larger rings; the cursor wake spawns far too many to do this for all
+       of them. */
+    if (cCv) {
+      var done = 0;
+      for (var ri = 0; ri < ripples.length && done < 5; ri++) {
+        var rf = ripples[ri];
+        if (rf.delay > 0 || rf.r < 46) continue;
+        var rk = Math.min(1, rf.life / 1.5);
+        var strength = (1 - rk) * (1 - rk) * rf.weight;
+        if (strength < 0.08) continue;
+        done++;
+
+        var bw = 20 + rf.r * 0.16;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(rf.x, rf.y, rf.r + bw, 0, Math.PI * 2);
+        ctx.arc(rf.x, rf.y, Math.max(0, rf.r - bw), 0, Math.PI * 2, true);
+        ctx.clip("evenodd");
+
+        var mag = 1 + 0.16 * strength;
+        ctx.translate(rf.x, rf.y);
+        ctx.scale(mag, mag);
+        ctx.translate(-rf.x, -rf.y);
+
+        var bx = rf.x - rf.r - bw, by = rf.y - rf.r - bw;
+        var bs = (rf.r + bw) * 2;
+
+        ctx.globalAlpha = 0.5 * strength;
+        ctx.drawImage(cCv, 0, 0, W, H);
+        // and the drifting colour bands, so they buckle with the wave too
+        sheenBands(bx, by, bs, bs);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
     }
+
+    sheenBands(0, 0, W, H);
 
     // Depth at the corners.
     if (!vignette) {
@@ -696,7 +743,15 @@
         phase: Math.random() * Math.PI * 2,
         flower: Math.random() < 0.34,
         ox: 0, oy: 0, vx: 0, vy: 0, tilt: 0,   // displaced by passing waves
+        buoy: 0,                               // set below, from the radius
       });
+    }
+  }
+
+  function padBuoyancy() {
+    // Smaller pads are lighter and ride the water more freely.
+    for (var i = 0; i < pads.length; i++) {
+      pads[i].buoy = Math.max(0.35, Math.min(1.5, 38 / pads[i].r));
     }
   }
 
@@ -708,12 +763,15 @@
 
       /* Shoved by passing wavefronts, then pulled back — a pad rocking in
          the wake is the clearest read that a splash disturbed the water. */
+      /*Response scales with the wave, and inversely with the pad: a big
+         pad rides a small ripple almost unmoved, a small one gets tossed. */
       waveForce(p.x + p.ox, p.y + p.oy, _wf, false);
-      p.vx += _wf[0] * 2.6 - p.ox * 0.06;
-      p.vy += _wf[1] * 2.6 - p.oy * 0.06;
+      var give = p.buoy * 4.2;
+      p.vx += _wf[0] * give - p.ox * 0.06;
+      p.vy += _wf[1] * give - p.oy * 0.06;
       p.vx *= 0.88; p.vy *= 0.88;
       p.ox += p.vx; p.oy += p.vy;
-      p.tilt += ((_wf[0] + _wf[1]) * 0.22 - p.tilt) * 0.12;
+      p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.12;
 
       ctx.save();
       ctx.translate(p.x + drift + p.ox, p.y + bob + p.oy);
@@ -812,7 +870,11 @@
       var band = Math.abs(d - rp.r);
       var width = 22 + rp.r * 0.12;
       if (band > width) continue;
-      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight * reach;
+      /* Amplitude scales with the size of the wave, so a small wake ring
+         nudges and a big splash ring shoves. Without this every ring pushed
+         the same and a click felt no heavier than a mouse sweep. */
+      var amp = Math.min(1.7, rp.max / 120);
+      var k = (1 - band / width) * (1 - rp.life / 1.5) * rp.weight * reach * amp;
       out[0] += (dx / d) * k;
       out[1] += (dy / d) * k;
     }
@@ -1002,14 +1064,20 @@
     if (mouse.on && mouse.px > -9000) {
       var mdx = mouse.x - mouse.px, mdy = mouse.y - mouse.py;
       wakeTravel += Math.sqrt(mdx * mdx + mdy * mdy);
-      var stride = 26;
-      if (wakeTravel > stride && ripples.length < 70) {
+      /* Spacing grows with speed and there's a hard cooldown, so a fast
+         sweep makes *bigger* rings rather than a dense stack of them.
+         Without the cooldown, orbiting quickly spawned ~78 rings a second
+         and out-disturbed an actual splash, which defeats the point. */
+      wakeCool -= dt;
+      var stride = 24 + mouse.vel * 64;
+      if (wakeTravel > stride && wakeCool <= 0 && ripples.length < 46) {
         wakeTravel = 0;
+        wakeCool = 0.07;
         addRipple(mouse.x, mouse.y,
-                  22 + mouse.vel * 46,          // faster cursor, wider ring
+                  18 + mouse.vel * 52,           // faster cursor, wider ring
                   0,
-                  0.2 + mouse.vel * 0.42,
-                  0.1);                          // shallow
+                  0.18 + mouse.vel * 0.34,
+                  0.05 + mouse.vel * 0.28);      // and a little deeper
       }
     }
     mouse.px = mouse.x;
@@ -1116,6 +1184,7 @@
     makeBottom();
     initFloor();
     makePads();
+    padBuoyancy();
     stock();
   }
 
