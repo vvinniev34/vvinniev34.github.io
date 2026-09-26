@@ -31,7 +31,7 @@
 
   var W = 0, H = 0, dpr = 1, t = 0;
   var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
-  var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0 };
+  var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0, dx: 0, dy: 0 };
   var running = false, raf = null, nextAmbient = 3;
   var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
 
@@ -881,6 +881,72 @@
   }
   var _wf = [0, 0];
 
+  /* ---- deformable wavefronts ------------------------------------------
+     A ring is stored as N radial samples. Dragging the cursor through one
+     dents it locally (`def`) and tears the crest (`cut`); the dent then
+     spreads to neighbouring samples and decays, and the tear heals. This
+     is what lets a ring be disturbed rather than just drawn — previously a
+     ring was a procedural circle and nothing in the scene could touch it.
+
+     State is allocated lazily: most wake rings are never touched, and
+     those stay on the cheap smooth path. */
+
+  var RN = 36;
+
+  function ensureDeform(rp) {
+    if (rp.def) return;
+    rp.def = []; rp.cut = []; rp.tmp = [];
+    for (var i = 0; i < RN; i++) { rp.def[i] = 0; rp.cut[i] = 0; rp.tmp[i] = 0; }
+  }
+
+  function disturbRings(dt) {
+    if (!ripples.length) return;
+    var moving = Math.sqrt(mouse.dx * mouse.dx + mouse.dy * mouse.dy);
+
+    for (var i = 0; i < ripples.length; i++) {
+      var rp = ripples[i];
+      if (rp.delay > 0 || rp.r < 8) continue;
+
+      // the cursor cutting across this particular crest
+      if (mouse.on && moving > 0.4) {
+        var dx = mouse.x - rp.x, dy = mouse.y - rp.y;
+        var d = Math.sqrt(dx * dx + dy * dy) || 1;
+        var band = 16 + rp.r * 0.12;
+        if (Math.abs(d - rp.r) < band) {
+          ensureDeform(rp);
+          var a = Math.atan2(dy, dx);
+          var slot = Math.floor(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN) % RN;
+          // how much of the cursor's motion is along the radius
+          var vr = (mouse.dx * dx / d + mouse.dy * dy / d);
+          var bite = Math.min(1, moving / 18);
+          // Bounded to a fraction of the radius — an unbounded dent on a
+          // small ring turns it inside out rather than denting it.
+          var lim = rp.r * 0.2;
+          for (var o = -2; o <= 2; o++) {
+            var si = (slot + o + RN) % RN;
+            var falloff = 1 - Math.abs(o) / 3;
+            var nd = rp.def[si] + vr * 0.75 * falloff;
+            rp.def[si] = nd > lim ? lim : (nd < -lim ? -lim : nd);
+            rp.cut[si] = Math.min(1.3, rp.cut[si] + bite * 0.8 * falloff);
+          }
+        }
+      }
+
+      if (!rp.def) continue;
+
+      // the dent travels around the crest and flattens out; the tear heals
+      var spread = 0.2, damp = 1 - dt * 2.2, heal = 1 - dt * 1.5;
+      for (var k = 0; k < RN; k++) {
+        var prev = rp.def[(k - 1 + RN) % RN], next = rp.def[(k + 1) % RN];
+        rp.tmp[k] = rp.def[k] + (prev + next - 2 * rp.def[k]) * spread;
+      }
+      for (var k2 = 0; k2 < RN; k2++) {
+        rp.def[k2] = rp.tmp[k2] * damp;
+        rp.cut[k2] *= heal;
+      }
+    }
+  }
+
   function splash(x, y) {
     // Four rings staggered outward, the leading one much wider than before.
     addRipple(x, y, 230, 0,    1.35, 1);
@@ -932,6 +998,7 @@
   }
 
   function updateRipples(dt) {
+    disturbRings(dt);
     for (var i = ripples.length - 1; i >= 0; i--) {
       var rp = ripples[i];
       if (rp.delay > 0) { rp.delay -= dt; continue; }
@@ -970,25 +1037,72 @@
       /* An expanding circle reads as a graphic; a real wavefront buckles as
          it travels. Radius is modulated per-angle, and the distortion grows
          with distance from the impact. */
+      function sampleR(ang, radius) {
+        var warp = 1
+          + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
+          + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
+          + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
+        var rr = radius * warp;
+        if (rp.def) {
+          // linear blend between the two nearest radial samples
+          var f = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
+          var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+          rr += rp.def[i0] * (1 - m) + rp.def[i1] * m;
+        }
+        return rr;
+      }
+
+      function cutAt(ang) {
+        if (!rp.def) return 0;
+        var f = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
+        var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+        return rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
+      }
+
       function ring(radius, alpha, width, colour) {
         // Scale detail with size; the cursor wake spawns a lot of small ones.
         var steps = Math.max(10, Math.min(44, Math.round(radius / 4)));
-        ctx.beginPath();
-        for (var si = 0; si <= steps; si++) {
-          var ang = (si / steps) * Math.PI * 2;
-          var warp = 1
-            + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
-            + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
-            + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
-          var rr = radius * warp;
-          var px = rp.x + Math.cos(ang) * rr, py = rp.y + Math.sin(ang) * rr;
-          if (si === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
         ctx.strokeStyle = colour;
-        ctx.globalAlpha = alpha;
         ctx.lineWidth = width;
-        ctx.stroke();
+
+        // Untouched ring: one closed path, as before.
+        if (!rp.def) {
+          ctx.beginPath();
+          for (var si = 0; si <= steps; si++) {
+            var ang = (si / steps) * Math.PI * 2;
+            var rr = sampleR(ang, radius);
+            var px = rp.x + Math.cos(ang) * rr, py = rp.y + Math.sin(ang) * rr;
+            if (si === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.globalAlpha = alpha;
+          ctx.stroke();
+          return;
+        }
+
+        /* Torn ring: walk the circumference and stroke only the runs that
+           survive, so a crest the cursor has cut through renders as broken
+           arcs with faded ends rather than a continuous loop. */
+        var open = false;
+        for (var sj = 0; sj <= steps; sj++) {
+          var a2 = (sj / steps) * Math.PI * 2;
+          var c = cutAt(a2);
+          if (c > 0.6) {                        // severed here
+            if (open) { ctx.stroke(); open = false; }
+            continue;
+          }
+          var r2 = sampleR(a2, radius);
+          var qx = rp.x + Math.cos(a2) * r2, qy = rp.y + Math.sin(a2) * r2;
+          if (!open) {
+            ctx.beginPath();
+            ctx.globalAlpha = alpha * (1 - c);
+            ctx.moveTo(qx, qy);
+            open = true;
+          } else {
+            ctx.lineTo(qx, qy);
+          }
+        }
+        if (open) ctx.stroke();
       }
 
       ring(rp.r, a, 2.6 * rp.weight * (1 - k * 0.45), C.light);
@@ -1063,6 +1177,7 @@
        separation is deliberate: only a click should stir the bottom. */
     if (mouse.on && mouse.px > -9000) {
       var mdx = mouse.x - mouse.px, mdy = mouse.y - mouse.py;
+      mouse.dx = mdx; mouse.dy = mdy;
       wakeTravel += Math.sqrt(mdx * mdx + mdy * mdy);
       /* Spacing grows with speed and there's a hard cooldown, so a fast
          sweep makes *bigger* rings rather than a dense stack of them.
@@ -1080,6 +1195,7 @@
                   0.05 + mouse.vel * 0.28);      // and a little deeper
       }
     }
+    if (!mouse.on) { mouse.dx = 0; mouse.dy = 0; }
     mouse.px = mouse.x;
     mouse.py = mouse.y;
 
