@@ -49,6 +49,10 @@
     C.accent    = v("--accent", "#b4451f");
     C.cream     = v("--koi-cream", "#fdfaf4");
     C.dark      = v("--koi-dark", "#2c2a26");
+    C.pad       = v("--pad", "#5d8f6b");
+    C.padRim    = v("--pad-rim", "#7fb287");
+    C.lotus     = v("--lotus", "#f6e3ea");
+    C.caustic   = v("--caustic", "236, 255, 246").split(",").map(Number);
   }
 
   /* Koi varieties, loosely. Each is [body, patch] plus how blotchy it is. */
@@ -83,8 +87,8 @@
   function makeFish(pal, scale) {
     var f = {
       pal: pal,
-      len: 6.5 * scale,             // spacing between spine joints
-      girth: 4.6 * scale,
+      len: 5.6 * scale,             // spacing between spine joints
+      girth: 3.1 * scale,
       speed: 0.42 + Math.random() * 0.3,
       base: 0.42 + Math.random() * 0.3,
       heading: Math.random() * Math.PI * 2,
@@ -273,28 +277,201 @@
 
   var baseGrad = null;   // rebuilt only on resize / theme change
 
+  /* ---- caustics ------------------------------------------------------------
+     The bright shifting web on the bottom of a pond. Interfering sine waves
+     pushed through a high power, which collapses the smooth field into thin
+     filaments — that filament network is the thing that actually reads as
+     "water" rather than "grey gradient". Computed into a small buffer
+     (roughly W/9) and scaled up, because at full resolution this would cost
+     a million sines a frame.
+     -------------------------------------------------------------------------- */
+
+  var cCv = null, cCtx = null, cImg = null, CW = 0, CH = 0;
+
+  function initCaustics() {
+    CW = Math.max(48, Math.min(200, Math.round(W / 9)));
+    CH = Math.max(32, Math.min(140, Math.round(H / 9)));
+    cCv = document.createElement("canvas");
+    cCv.width = CW;
+    cCv.height = CH;
+    cCtx = cCv.getContext("2d");
+    cImg = cCtx.createImageData(CW, CH);
+
+    // Colour is constant; only the alpha channel changes per frame.
+    var d = cImg.data, r = C.caustic[0], g = C.caustic[1], b = C.caustic[2];
+    for (var i = 0; i < CW * CH; i++) {
+      d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b;
+    }
+  }
+
+  function renderCaustics() {
+    var d = cImg.data, k = 0;
+    var t1 = t * 0.55, t2 = t * 0.42, t3 = t * 0.70, t4 = t * 0.90;
+    var cx = 4.5, cy = 3.0;
+
+    for (var y = 0; y < CH; y++) {
+      var ny = (y / CH) * 6.0;
+      var dy = ny - cy;
+      for (var x = 0; x < CW; x++, k++) {
+        var nx = (x / CW) * 9.0;
+        var dx = nx - cx;
+        var v = Math.sin(nx + t1)
+              + Math.sin(ny * 1.13 - t2)
+              + Math.sin((nx + ny) * 0.78 + t3)
+              + Math.sin(Math.sqrt(dx * dx + dy * dy) * 1.6 - t4);
+
+        var f = Math.abs(Math.sin(v * 0.8));
+        var f2 = f * f, f4 = f2 * f2;      // f^8 — sharpens bands into threads
+        d[k * 4 + 3] = (f4 * f4 * 255) | 0;
+      }
+    }
+    cCtx.putImageData(cImg, 0, 0);
+  }
+
+  /* ---- pond floor ----------------------------------------------------------
+     Static mottling so the water has something to be transparent *to*.
+     Generated once per resize.
+     -------------------------------------------------------------------------- */
+
+  var siltCv = null;
+
+  function initSilt() {
+    siltCv = document.createElement("canvas");
+    var sw = Math.max(64, Math.round(W / 3));
+    var sh = Math.max(48, Math.round(H / 3));
+    siltCv.width = sw;
+    siltCv.height = sh;
+    var g = siltCv.getContext("2d");
+    for (var i = 0; i < 110; i++) {
+      var x = Math.random() * sw, y = Math.random() * sh;
+      var r = 6 + Math.random() * (sw / 7);
+      var rg = g.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, "rgba(0,0,0," + (0.03 + Math.random() * 0.07).toFixed(3) + ")");
+      rg.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = rg;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
+
   function drawWater() {
     if (!baseGrad) {
-      baseGrad = ctx.createRadialGradient(W * 0.5, H * 0.45, 0,
-                                          W * 0.5, H * 0.45, Math.max(W, H) * 0.7);
+      baseGrad = ctx.createRadialGradient(W * 0.45, H * 0.42, Math.min(W, H) * 0.05,
+                                          W * 0.45, H * 0.42, Math.max(W, H) * 0.78);
       baseGrad.addColorStop(0, C.pond);
       baseGrad.addColorStop(1, C.deep);
     }
+    ctx.globalAlpha = 1;
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, W, H);
 
-    // Slow caustic blooms — three soft lights drifting out of phase. Each is
-    // filled only over its own bounding box, not the whole canvas.
-    for (var i = 0; i < 3; i++) {
-      var px = W * (0.3 + 0.4 * i) + Math.sin(t * 0.13 + i * 2.1) * W * 0.16;
-      var py = H * (0.35 + 0.18 * i) + Math.cos(t * 0.11 + i * 1.7) * H * 0.2;
-      var rr = Math.min(W, H) * (0.38 + 0.08 * Math.sin(t * 0.2 + i));
-      var cg = ctx.createRadialGradient(px, py, 0, px, py, rr);
-      cg.addColorStop(0, C.light);
-      cg.addColorStop(1, "transparent");
-      ctx.fillStyle = cg;
-      ctx.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+    if (siltCv) {
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(siltCv, 0, 0, W, H);
     }
+
+    if (cCv) {
+      renderCaustics();
+      ctx.globalAlpha = 0.55;
+      ctx.imageSmoothingEnabled = true;
+      if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(cCv, 0, 0, W, H);
+      // A second pass, offset and scaled differently, so the web doesn't
+      // read as one tiling pattern.
+      ctx.globalAlpha = 0.3;
+      ctx.drawImage(cCv, -W * 0.18, -H * 0.12, W * 1.42, H * 1.36);
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- lily pads ------------------------------------------------------------
+     Nothing says "pond" faster. They float on the surface, so they draw over
+     the fish rather than under them.
+     -------------------------------------------------------------------------- */
+
+  var pads = [];
+
+  function makePads() {
+    var n = Math.max(2, Math.min(7, Math.round((W * H) / 300000)));
+    pads = [];
+    for (var i = 0; i < n; i++) {
+      pads.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 20 + Math.random() * 26,
+        rot: Math.random() * Math.PI * 2,
+        phase: Math.random() * Math.PI * 2,
+        flower: Math.random() < 0.34,
+      });
+    }
+  }
+
+  function drawPads() {
+    for (var i = 0; i < pads.length; i++) {
+      var p = pads[i];
+      var bob = Math.sin(t * 0.5 + p.phase) * 1.8;
+      var drift = Math.sin(t * 0.11 + p.phase) * 6;
+
+      ctx.save();
+      ctx.translate(p.x + drift, p.y + bob);
+      ctx.rotate(p.rot + Math.sin(t * 0.13 + p.phase) * 0.06);
+
+      // shadow cast down onto the floor
+      ctx.beginPath();
+      ctx.moveTo(5, 7);
+      ctx.arc(5, 7, p.r, 0.42, Math.PI * 2 - 0.42);
+      ctx.closePath();
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = "#03120d";
+      ctx.fill();
+
+      // the pad itself, with its characteristic notch
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, p.r, 0.42, Math.PI * 2 - 0.42);
+      ctx.closePath();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = C.pad;
+      ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = C.padRim;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // veins
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = C.padRim;
+      ctx.lineWidth = 0.8;
+      for (var v = 0; v < 7; v++) {
+        var a = 0.6 + (v / 6) * (Math.PI * 2 - 1.2);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * p.r * 0.88, Math.sin(a) * p.r * 0.88);
+        ctx.stroke();
+      }
+
+      if (p.flower) {
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = C.lotus;
+        for (var q = 0; q < 6; q++) {
+          var ang = (q / 6) * Math.PI * 2 + p.phase;
+          ctx.save();
+          ctx.translate(Math.cos(ang) * p.r * 0.2, Math.sin(ang) * p.r * 0.2);
+          ctx.rotate(ang);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, p.r * 0.26, p.r * 0.12, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.fillStyle = "#e8c66a";
+        ctx.beginPath();
+        ctx.arc(0, 0, p.r * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   }
 
   /* ---- ripples & splashes ------------------------------------------------- */
@@ -423,6 +600,7 @@
     drawWakes();
     fish.forEach(drawFish);
     drawRipples();
+    drawPads();          // floating on the surface, so over the fish
   }
 
   var last = 0;
@@ -458,15 +636,18 @@
     cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     baseGrad = null;
+    initCaustics();
+    initSilt();
+    makePads();
     stock();
   }
 
   function stock() {
     var pals = palettes();
-    var want = Math.max(4, Math.min(11, Math.round((W * H) / 78000)));
+    var want = Math.max(6, Math.min(18, Math.round((W * H) / 92000)));
     var keep = fish.slice(0, want);
     while (keep.length < want) {
-      keep.push(makeFish(pals[keep.length % pals.length], 2.0 + Math.random() * 1.5));
+      keep.push(makeFish(pals[keep.length % pals.length], 0.85 + Math.random() * 0.7));
     }
     keep.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
     fish = keep;
@@ -514,6 +695,7 @@
   new MutationObserver(function () {
     readColors();
     baseGrad = null;
+    initCaustics();
     var pals = palettes();
     fish.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

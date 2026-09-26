@@ -25,9 +25,14 @@ html[data-theme="light"] {
   --grain:   .05;
 
   /* the koi pond (canvas.js) */
-  --pond:       #e9efec;
-  --pond-deep:  #d4e0db;
-  --pond-light: rgba(255, 255, 255, 0.55);
+  --pond:       #a8c9bd;   /* shallow water */
+  --pond-deep:  #5f8b81;   /* depth at the edges */
+  --pond-light: rgba(238, 255, 247, 0.8);
+  --caustic:    236, 255, 246;   /* raw rgb — the light web on the bottom */
+  --silt:       #4a6b60;   /* mottling on the pond floor */
+  --pad:        #5d8f6b;   /* lily pads */
+  --pad-rim:    #7fb287;
+  --lotus:      #f6e3ea;
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
 }
@@ -42,9 +47,14 @@ html[data-theme="dark"] {
   --grain:   .07;
 
   /* the koi pond (canvas.js) */
-  --pond:       #0e1615;
-  --pond-deep:  #070d0c;
-  --pond-light: rgba(168, 222, 208, 0.07);
+  --pond:       #103832;   /* shallow water */
+  --pond-deep:  #05191b;   /* depth at the edges */
+  --pond-light: rgba(130, 235, 212, 0.34);
+  --caustic:    134, 240, 214;   /* raw rgb — the light web on the bottom */
+  --silt:       #04100f;   /* mottling on the pond floor */
+  --pad:        #1d4a39;   /* lily pads */
+  --pad-rim:    #2f6b4d;
+  --lotus:      #e8cdd8;
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;
 }
@@ -187,28 +197,34 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   pointer-events: none;
 }
 
-/* The koi stay visible out in the margins; behind the text they're washed
-   back so the words always win. */
-body::before {
+/* Only the left column needs protecting — the terminal has its own solid
+   background. A full-width band was masking the entire pond, which is why
+   the water read as flat grey. */
+.col--intro { position: relative; }
+.col--intro::before {
   content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 1;
+  position: absolute;
+  z-index: -1;
+  inset: -6% -18% -6% -22%;
   pointer-events: none;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    color-mix(in srgb, var(--bg) 93%, transparent) 19%,
-    color-mix(in srgb, var(--bg) 93%, transparent) 81%,
-    transparent 100%
+  background: radial-gradient(
+    64% 52% at 44% 50%,
+    color-mix(in srgb, var(--bg) 92%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 78%, transparent) 52%,
+    transparent 76%
   );
 }
 
-/* Narrow screens have no margins to spare, so flatten the scrim and let a
-   little water show through everywhere instead. */
+/* Stacked layout has no spare margin, so wash the whole thing back instead. */
 @media (max-width: 62rem) {
+  .col--intro::before { inset: -4% -50%; }
   body::before {
-    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
   }
 }
 
@@ -319,7 +335,8 @@ body::before {
   min-height: 0;
   border: 1px solid var(--rule);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--fg) 3%, var(--bg));
+  background: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  justify-content: flex-start;
   overflow: hidden;
   font-family: var(--mono);
   font-size: .78rem;
@@ -352,8 +369,10 @@ body::before {
   color: var(--muted);
 }
 
+/* Sized to its content, not the column: the prompt sits directly under the
+   last line of output instead of being pinned to the bottom of a tall box. */
 .term__body {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: .85rem .9rem .3rem;
