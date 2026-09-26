@@ -23,6 +23,13 @@ html[data-theme="light"] {
   --rule:    #e0dbd0;
   --wash:    rgba(23, 22, 15, 0.045);
   --grain:   .05;
+
+  /* the koi pond (canvas.js) */
+  --pond:       #e9efec;
+  --pond-deep:  #d4e0db;
+  --pond-light: rgba(255, 255, 255, 0.55);
+  --koi-cream:  #fdfaf4;
+  --koi-dark:   #2c2a26;
 }
 
 html[data-theme="dark"] {
@@ -33,6 +40,13 @@ html[data-theme="dark"] {
   --rule:    #2a2825;
   --wash:    rgba(239, 236, 228, 0.07);
   --grain:   .07;
+
+  /* the koi pond (canvas.js) */
+  --pond:       #0e1615;
+  --pond-deep:  #070d0c;
+  --pond-light: rgba(168, 222, 208, 0.07);
+  --koi-cream:  #f2ece0;
+  --koi-dark:   #14120f;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -136,20 +150,35 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   justify-content: center;
 }
 
-/* The flow field sits behind the name, bleeding past the text column and
-   fading out at the edges so it never fights the type. */
+/* The pond bleeds past the text column and dissolves at the edges, so it
+   reads as water the page is sitting on rather than a boxed-in widget. */
 .hero__canvas {
   position: absolute;
-  z-index: -1;
-  top: -6%;
+  z-index: -2;
+  top: -8%;
   left: 50%;
   width: 100vw;
-  height: 112%;
+  height: 116%;
   transform: translateX(-50%);
   pointer-events: none;
-  -webkit-mask-image: radial-gradient(120% 85% at 50% 45%, #000 25%, transparent 78%);
-          mask-image: radial-gradient(120% 85% at 50% 45%, #000 25%, transparent 78%);
-  opacity: .85;
+  -webkit-mask-image: radial-gradient(115% 80% at 50% 45%, #000 30%, transparent 76%);
+          mask-image: radial-gradient(115% 80% at 50% 45%, #000 30%, transparent 76%);
+}
+
+/* A soft wash of page colour between the water and the words. Without it the
+   koi swim straight through your name and nothing is readable. */
+.masthead::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -4% -12%;
+  pointer-events: none;
+  background: radial-gradient(
+    58% 46% at 42% 46%,
+    color-mix(in srgb, var(--bg) 88%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 62%, transparent) 45%,
+    transparent 72%
+  );
 }
 
 .masthead__name {

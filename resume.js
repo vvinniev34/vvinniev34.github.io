@@ -52,7 +52,7 @@ const RESUME = {
   githubUser: "vvinniev34",
 
   /* ---- interactive bits -------------------------------------------------- */
-  // heroCanvas: the drifting flow field behind your name (canvas.js)
+  // heroCanvas: the koi pond behind your name — click the water (canvas.js)
   // terminal:   the prompt you can actually type into (terminal.js)
   // Set either to false to remove it entirely.
 

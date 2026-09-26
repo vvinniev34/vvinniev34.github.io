@@ -1,9 +1,12 @@
 /* ============================================================================
-   canvas.js — the drifting field behind your name.
+   canvas.js — a koi pond, seen from above, behind your name.
 
-   A few hundred particles following a slowly-rotating flow field, leaving
-   short trails in your accent colour. They bend away from the cursor. No
-   library, no assets, ~1kb of state.
+   The fish steer by a chain of spine points that trail the head, which is
+   what gives them the S-curve as they turn. They wander on their own, flee
+   the cursor, and scatter when you click — which also drops a splash.
+
+   Colours all come from CSS variables (--pond, --accent, --koi-cream …) so
+   the pond restyles itself with the light/dark toggle.
 
    Set `heroCanvas: false` in resume.js to remove it.
    ========================================================================== */
@@ -27,138 +30,411 @@
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  var W = 0, H = 0, dpr = 1;
-  var parts = [];
-  var t = 0;
+  var W = 0, H = 0, dpr = 1, t = 0;
+  var fish = [], ripples = [], drops = [];
   var mouse = { x: -9999, y: -9999, on: false };
-  var running = false, raf = null;
+  var running = false, raf = null, nextAmbient = 3;
 
-  /* Read the live theme colours so the field recolours with the toggle. */
-  var accent = "#b4451f", bg = "#faf8f4";
+  /* ---- palette ------------------------------------------------------------ */
+
+  var C = {};
   function readColors() {
     var cs = getComputedStyle(document.documentElement);
-    accent = (cs.getPropertyValue("--accent") || accent).trim();
-    bg = (cs.getPropertyValue("--bg") || bg).trim();
+    function v(name, fallback) {
+      var out = (cs.getPropertyValue(name) || "").trim();
+      return out || fallback;
+    }
+    C.pond      = v("--pond", "#e9efec");
+    C.deep      = v("--pond-deep", "#d4e0db");
+    C.light     = v("--pond-light", "rgba(255,255,255,.55)");
+    C.accent    = v("--accent", "#b4451f");
+    C.cream     = v("--koi-cream", "#fdfaf4");
+    C.dark      = v("--koi-dark", "#2c2a26");
   }
 
-  function resize() {
-    // Measure the canvas as CSS lays it out (it bleeds wider than the text
-    // column) rather than imposing a size and fighting the stylesheet.
-    var r = cv.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = Math.max(1, Math.round(r.width));
-    H = Math.max(1, Math.round(r.height));
-    cv.width = W * dpr;
-    cv.height = H * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Density scales with area so phones don't melt.
-    var target = Math.round(Math.min(520, (W * H) / 2600));
-    parts = [];
-    for (var i = 0; i < target; i++) parts.push(spawn());
-
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+  /* Koi varieties, loosely. Each is [body, patch] plus how blotchy it is. */
+  function palettes() {
+    return [
+      { body: C.cream,  patch: C.accent, spots: 3 },   // kohaku
+      { body: C.accent, patch: C.cream,  spots: 2 },   // orange
+      { body: C.cream,  patch: C.dark,   spots: 2 },   // bekko
+      { body: C.dark,   patch: C.accent, spots: 3 },   // showa
+      { body: C.cream,  patch: C.accent, spots: 1 },   // mostly white
+    ];
   }
 
-  function spawn(p) {
-    p = p || {};
-    p.x = Math.random() * W;
-    p.y = Math.random() * H;
-    p.px = p.x;
-    p.py = p.y;
-    p.life = 60 + Math.random() * 180;
-    p.w = Math.random() < 0.12 ? 1.3 : 0.6;   // a few heavier strands
-    return p;
+  /* ---- geometry helpers --------------------------------------------------- */
+
+  function smoothShape(pts) {
+    // Quadratic through midpoints — keeps the body from looking polygonal.
+    if (pts.length < 3) return;
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (var i = 1; i < pts.length - 1; i++) {
+      var mx = (pts[i].x + pts[i + 1].x) / 2;
+      var my = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
   }
 
-  /* Cheap smooth field — not true Perlin, but it reads the same at this scale. */
-  function angleAt(x, y, time) {
-    var a = Math.sin(x * 0.0042 + time) * Math.cos(y * 0.0049 - time * 0.7);
-    var b = Math.sin((x + y) * 0.0027 + time * 1.4) * 0.6;
-    var c = Math.cos(y * 0.0033 - time * 0.45) * 0.4;
-    return (a + b + c) * Math.PI;
+  /* ---- fish --------------------------------------------------------------- */
+
+  var SEG = 13;
+
+  function makeFish(pal, scale) {
+    var f = {
+      pal: pal,
+      len: 6.5 * scale,             // spacing between spine joints
+      girth: 4.6 * scale,
+      speed: 0.42 + Math.random() * 0.3,
+      base: 0.42 + Math.random() * 0.3,
+      heading: Math.random() * Math.PI * 2,
+      wander: Math.random() * Math.PI * 2,
+      phase: Math.random() * Math.PI * 2,
+      wag: 0.9 + Math.random() * 0.5,
+      spine: [],
+      depth: 0.55 + Math.random() * 0.45,   // how far under the surface
+    };
+    var x = Math.random() * W, y = Math.random() * H;
+    for (var i = 0; i < SEG; i++) {
+      f.spine.push({ x: x - Math.cos(f.heading) * f.len * i,
+                     y: y - Math.sin(f.heading) * f.len * i });
+    }
+    return f;
   }
 
-  /* Trails need the previous frame to survive, so everything is drawn onto an
-     offscreen buffer that we fade slightly each tick, then blit across. */
-  var buf = document.createElement("canvas");
-  var bctx = buf.getContext("2d");
-
-  function ensureBuffer() {
-    if (buf.width === cv.width && buf.height === cv.height) return;
-    buf.width = cv.width;
-    buf.height = cv.height;
-    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    bctx.fillStyle = bg;
-    bctx.fillRect(0, 0, W, H);
+  function widthAt(i, f) {
+    // 0 = nose, 1 = tail tip. Widest just behind the head.
+    var u = i / (SEG - 1);
+    var w = Math.sin(Math.pow(u, 0.62) * Math.PI) * f.girth;
+    return Math.max(0.6, w * (1 - u * 0.45));
   }
 
-  /* One simulation tick: advance every particle and draw its segment. */
-  function advance() {
-    t += 0.0016;
-    ensureBuffer();
+  function updateFish(f, dt) {
+    var head = f.spine[0];
 
-    // Fade what's already there, so old trail segments decay away.
-    bctx.globalCompositeOperation = "source-over";
-    bctx.globalAlpha = 0.055;
-    bctx.fillStyle = bg;
-    bctx.fillRect(0, 0, W, H);
-    bctx.globalAlpha = 1;
-    bctx.lineCap = "round";
+    // Wander: a slowly drifting target heading.
+    f.wander += (Math.random() - 0.5) * 0.22 * dt * 60;
+    var desired = f.wander;
 
-    for (var i = 0; i < parts.length; i++) {
-      var p = parts[i];
-      var ang = angleAt(p.x, p.y, t);
-      var vx = Math.cos(ang) * 1.15;
-      var vy = Math.sin(ang) * 1.15;
-
-      if (mouse.on) {
-        var dx = p.x - mouse.x, dy = p.y - mouse.y;
-        var d2 = dx * dx + dy * dy;
-        if (d2 < 26000 && d2 > 0.5) {
-          var f = (26000 - d2) / 26000, d = Math.sqrt(d2);
-          vx += (dx / d) * f * 3.6;
-          vy += (dy / d) * f * 3.6;
-        }
+    // Flee the cursor.
+    var fleeing = 0;
+    if (mouse.on) {
+      var dx = head.x - mouse.x, dy = head.y - mouse.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 240) {
+        desired = Math.atan2(dy, dx);
+        fleeing = (240 - d) / 240;
       }
+    }
 
-      p.px = p.x; p.py = p.y;
-      p.x += vx; p.y += vy;
-      p.life--;
+    // Stay in frame: steer back before drifting off the edges.
+    var m = 90;
+    if (head.x < m)        desired = 0;
+    else if (head.x > W - m) desired = Math.PI;
+    if (head.y < m)        desired = Math.PI / 2;
+    else if (head.y > H - m) desired = -Math.PI / 2;
 
-      if (p.life <= 0 || p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) {
-        spawn(p);
-        continue;
-      }
+    // Turn toward the desired heading by the short way round.
+    var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
+    f.heading += diff * (0.035 + fleeing * 0.22) * dt * 60;
 
-      bctx.beginPath();
-      bctx.moveTo(p.px, p.py);
-      bctx.lineTo(p.x, p.y);
-      bctx.strokeStyle = accent;
-      bctx.globalAlpha = p.w > 1 ? 0.3 : 0.13;
-      bctx.lineWidth = p.w;
-      bctx.stroke();
+    // Tail beat — faster when startled. This wiggle is what drives the body.
+    f.phase += (0.13 + f.speed * 0.06 + fleeing * 0.2) * dt * 60;
+    var swim = f.heading + Math.sin(f.phase) * 0.14 * f.wag;
+
+    f.speed += ((f.base + fleeing * 3.0) - f.speed) * 0.09 * dt * 60;
+
+    head.x += Math.cos(swim) * f.speed * dt * 60;
+    head.y += Math.sin(swim) * f.speed * dt * 60;
+
+    // Each joint follows the one ahead at a fixed distance.
+    for (var i = 1; i < SEG; i++) {
+      var a = f.spine[i - 1], b = f.spine[i];
+      var vx = b.x - a.x, vy = b.y - a.y;
+      var dist = Math.sqrt(vx * vx + vy * vy) || 1;
+      b.x = a.x + (vx / dist) * f.len;
+      b.y = a.y + (vy / dist) * f.len;
     }
   }
 
-  function blit() {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.drawImage(buf, 0, 0);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  function bodyOutline(f) {
+    var left = [], right = [];
+    for (var i = 0; i < SEG; i++) {
+      var p = f.spine[i];
+      var prev = f.spine[Math.max(0, i - 1)];
+      var next = f.spine[Math.min(SEG - 1, i + 1)];
+      var dx = next.x - prev.x, dy = next.y - prev.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var nx = -dy / d, ny = dx / d;
+      var w = widthAt(i, f);
+      left.push({ x: p.x + nx * w, y: p.y + ny * w });
+      right.push({ x: p.x - nx * w, y: p.y - ny * w });
+    }
+    return left.concat(right.reverse());
   }
 
-  function frame() {
+  function fishPath(f) {
+    ctx.beginPath();
+    smoothShape(bodyOutline(f));
+    ctx.closePath();
+  }
+
+  function drawTail(f, color, alpha) {
+    // A flared, translucent caudal fin trailing the last few joints.
+    var a = f.spine[SEG - 3], b = f.spine[SEG - 1];
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var d = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / d, uy = dy / d;
+    var nx = -uy, ny = ux;
+    var L = f.girth * 2.5, Wd = f.girth * 1.7;
+    var tipx = b.x + ux * L, tipy = b.y + uy * L;
+
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.quadraticCurveTo(b.x + ux * L * 0.5 + nx * Wd * 0.7,
+                         b.y + uy * L * 0.5 + ny * Wd * 0.7,
+                         tipx + nx * Wd, tipy + ny * Wd);
+    ctx.quadraticCurveTo(tipx, tipy, tipx - nx * Wd, tipy - ny * Wd);
+    ctx.quadraticCurveTo(b.x + ux * L * 0.5 - nx * Wd * 0.7,
+                         b.y + uy * L * 0.5 - ny * Wd * 0.7,
+                         b.x, b.y);
+    ctx.closePath();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function drawFins(f, color, alpha) {
+    var i = 3;
+    var p = f.spine[i], prev = f.spine[i - 1], next = f.spine[i + 1];
+    var dx = next.x - prev.x, dy = next.y - prev.y;
+    var d = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ang = Math.atan2(dy, dx);
+    var w = widthAt(i, f);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    [1, -1].forEach(function (s) {
+      ctx.save();
+      ctx.translate(p.x - (dy / d) * w * s * 0.5, p.y + (dx / d) * w * s * 0.5);
+      ctx.rotate(ang + s * 0.85);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, f.girth * 1.5, f.girth * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  function drawFish(f) {
+    // Shadow on the pond floor, offset by how deep the fish is swimming.
+    var off = 5 + f.depth * 7;
+    ctx.save();
+    ctx.translate(off, off * 1.15);
+    fishPath(f);
+    ctx.globalAlpha = 0.13 * f.depth;
+    ctx.fillStyle = "#04120e";
+    ctx.fill();
+    ctx.restore();
+
+    var fade = 0.55 + f.depth * 0.45;
+
+    drawTail(f, f.pal.body, 0.3 * fade);
+    drawFins(f, f.pal.body, 0.35 * fade);
+
+    fishPath(f);
+    ctx.globalAlpha = 0.9 * fade;
+    ctx.fillStyle = f.pal.body;
+    ctx.fill();
+
+    // Patches, clipped to the body so they read as markings.
+    ctx.save();
+    fishPath(f);
+    ctx.clip();
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.fillStyle = f.pal.patch;
+    for (var s = 0; s < f.pal.spots; s++) {
+      var idx = 1 + Math.floor(((s + 0.7) / (f.pal.spots + 0.4)) * (SEG - 4));
+      var p = f.spine[idx];
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, f.girth * (1.5 - s * 0.22), f.girth * 1.05,
+                  f.phase * 0.02 + s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- water -------------------------------------------------------------- */
+
+  var baseGrad = null;   // rebuilt only on resize / theme change
+
+  function drawWater() {
+    if (!baseGrad) {
+      baseGrad = ctx.createRadialGradient(W * 0.5, H * 0.45, 0,
+                                          W * 0.5, H * 0.45, Math.max(W, H) * 0.7);
+      baseGrad.addColorStop(0, C.pond);
+      baseGrad.addColorStop(1, C.deep);
+    }
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Slow caustic blooms — three soft lights drifting out of phase. Each is
+    // filled only over its own bounding box, not the whole canvas.
+    for (var i = 0; i < 3; i++) {
+      var px = W * (0.3 + 0.4 * i) + Math.sin(t * 0.13 + i * 2.1) * W * 0.16;
+      var py = H * (0.35 + 0.18 * i) + Math.cos(t * 0.11 + i * 1.7) * H * 0.2;
+      var rr = Math.min(W, H) * (0.38 + 0.08 * Math.sin(t * 0.2 + i));
+      var cg = ctx.createRadialGradient(px, py, 0, px, py, rr);
+      cg.addColorStop(0, C.light);
+      cg.addColorStop(1, "transparent");
+      ctx.fillStyle = cg;
+      ctx.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+    }
+  }
+
+  /* ---- ripples & splashes ------------------------------------------------- */
+
+  function addRipple(x, y, max, delay, weight) {
+    ripples.push({ x: x, y: y, r: 0, max: max, life: 0, delay: delay || 0,
+                   weight: weight == null ? 1 : weight });
+  }
+
+  function splash(x, y) {
+    addRipple(x, y, 120, 0,    1);
+    addRipple(x, y, 82,  0.09, 0.75);
+    addRipple(x, y, 48,  0.18, 0.5);
+
+    for (var i = 0; i < 12; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var sp = 1.6 + Math.random() * 3.4;
+      drops.push({
+        x: x, y: y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        r: 1 + Math.random() * 2.2,
+        life: 0.42 + Math.random() * 0.4, age: 0,
+      });
+    }
+
+    // Everything nearby bolts.
+    fish.forEach(function (f) {
+      var h = f.spine[0];
+      var dx = h.x - x, dy = h.y - y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 260) {
+        f.heading = Math.atan2(dy, dx);
+        f.wander = f.heading;
+        f.speed = 3.4 * (1 - d / 260) + 0.8;
+      }
+    });
+  }
+
+  function updateRipples(dt) {
+    for (var i = ripples.length - 1; i >= 0; i--) {
+      var rp = ripples[i];
+      if (rp.delay > 0) { rp.delay -= dt; continue; }
+      rp.life += dt;
+      rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / 1.5), 2.2));
+      if (rp.life > 1.5) ripples.splice(i, 1);
+    }
+    for (var j = drops.length - 1; j >= 0; j--) {
+      var d = drops[j];
+      d.age += dt;
+      d.x += d.vx; d.y += d.vy;
+      d.vx *= 0.94; d.vy *= 0.94;
+      if (d.age >= d.life) {
+        addRipple(d.x, d.y, 10 + Math.random() * 14, 0, 0.4);
+        drops.splice(j, 1);
+      }
+    }
+  }
+
+  function drawRipples() {
+    ctx.lineCap = "round";
+    ripples.forEach(function (rp) {
+      if (rp.delay > 0) return;
+      var k = Math.min(1, rp.life / 1.5);
+      var a = (1 - k) * (1 - k) * 0.5 * rp.weight;
+      if (a <= 0.004) return;
+
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+      ctx.strokeStyle = C.light;
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 1.6 * rp.weight * (1 - k * 0.5);
+      ctx.stroke();
+
+      // A darker trailing ring gives the crest some relief.
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, rp.r * 0.88, 0, Math.PI * 2);
+      ctx.strokeStyle = C.deep;
+      ctx.globalAlpha = a * 0.5;
+      ctx.lineWidth = 1.1 * rp.weight;
+      ctx.stroke();
+    });
+
+    drops.forEach(function (d) {
+      var k = 1 - d.age / d.life;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r * k, 0, Math.PI * 2);
+      ctx.fillStyle = C.light;
+      ctx.globalAlpha = 0.55 * k;
+      ctx.fill();
+    });
+
+    ctx.globalAlpha = 1;
+  }
+
+  /* Wake: a soft ring where each fish is pushing water. */
+  function drawWakes() {
+    fish.forEach(function (f) {
+      var h = f.spine[0];
+      ctx.beginPath();
+      ctx.ellipse(h.x, h.y, f.girth * 3.4, f.girth * 2.6, f.heading, 0, Math.PI * 2);
+      ctx.strokeStyle = C.light;
+      ctx.globalAlpha = 0.1;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- loop --------------------------------------------------------------- */
+
+  function step(dt) {
+    t += dt;
+    updateRipples(dt);
+    fish.forEach(function (f) { updateFish(f, dt); });
+
+    // Every so often something touches the surface on its own.
+    nextAmbient -= dt;
+    if (nextAmbient <= 0) {
+      nextAmbient = 4 + Math.random() * 7;
+      addRipple(Math.random() * W, Math.random() * H, 26 + Math.random() * 30, 0, 0.55);
+    }
+  }
+
+  function draw() {
+    drawWater();
+    drawWakes();
+    fish.forEach(drawFish);
+    drawRipples();
+  }
+
+  var last = 0;
+  function frame(now) {
     if (!running) return;
-    advance();
-    blit();
+    var dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+    last = now;
+    step(dt);
+    draw();
     raf = requestAnimationFrame(frame);
   }
 
   function start() {
     if (running || reduced) return;
     running = true;
+    last = 0;
     raf = requestAnimationFrame(frame);
   }
   function stop() {
@@ -167,15 +443,37 @@
     raf = null;
   }
 
-  /* ---- wiring ------------------------------------------------------------ */
+  /* ---- setup -------------------------------------------------------------- */
+
+  function resize() {
+    var r = cv.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(1, Math.round(r.width));
+    H = Math.max(1, Math.round(r.height));
+    cv.width = W * dpr;
+    cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    baseGrad = null;
+    stock();
+  }
+
+  function stock() {
+    var pals = palettes();
+    var want = Math.max(4, Math.min(11, Math.round((W * H) / 78000)));
+    var keep = fish.slice(0, want);
+    while (keep.length < want) {
+      keep.push(makeFish(pals[keep.length % pals.length], 2.0 + Math.random() * 1.5));
+    }
+    keep.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
+    fish = keep;
+  }
 
   readColors();
   resize();
 
   if (reduced) {
-    // Settle the field, then paint it once — the shape without the motion.
-    for (var k = 0; k < 140; k++) advance();
-    blit();
+    for (var k = 0; k < 220; k++) step(0.016);   // let them spread out
+    draw();
   } else {
     start();
   }
@@ -183,11 +481,7 @@
   var rt;
   window.addEventListener("resize", function () {
     clearTimeout(rt);
-    rt = setTimeout(function () {
-      readColors();
-      resize();
-      buf.width = 0;          // force the buffer to rebuild at the new size
-    }, 180);
+    rt = setTimeout(function () { readColors(); resize(); }, 180);
   });
 
   masthead.addEventListener("pointermove", function (e) {
@@ -198,7 +492,14 @@
   });
   masthead.addEventListener("pointerleave", function () { mouse.on = false; });
 
-  // Don't burn battery when it isn't on screen.
+  // Click the water to splash. The canvas itself stays pointer-events:none so
+  // text is still selectable and the links underneath still work.
+  masthead.addEventListener("pointerdown", function (e) {
+    var r = cv.getBoundingClientRect();
+    splash(e.clientX - r.left, e.clientY - r.top);
+    if (reduced) { step(0.016); draw(); }
+  });
+
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (es) {
       es[0].isIntersecting ? start() : stop();
@@ -208,10 +509,11 @@
     document.hidden ? stop() : start();
   });
 
-  // Recolour when the theme toggle flips.
   new MutationObserver(function () {
     readColors();
-    buf.width = 0;
+    baseGrad = null;
+    var pals = palettes();
+    fish.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
   window.addEventListener("beforeprint", stop);
