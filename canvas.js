@@ -17,13 +17,12 @@
   var R = typeof RESUME !== "undefined" ? RESUME : null;
   if (!R || R.heroCanvas === false) return;
 
-  var masthead = document.querySelector(".masthead");
-  if (!masthead) return;
-
+  // The pond is a fixed, full-viewport backdrop: it stays put while the page
+  // scrolls over it, so the fish are visible the whole way down.
   var cv = document.createElement("canvas");
-  cv.className = "hero__canvas";
+  cv.className = "pond";
   cv.setAttribute("aria-hidden", "true");
-  masthead.insertBefore(cv, masthead.firstChild);
+  document.body.insertBefore(cv, document.body.firstChild);
 
   var ctx = cv.getContext("2d");
   if (!ctx) return;
@@ -113,27 +112,32 @@
   function updateFish(f, dt) {
     var head = f.spine[0];
 
-    // Wander: a slowly drifting target heading.
+    // Wander: a slowly drifting baseline direction.
     f.wander += (Math.random() - 0.5) * 0.22 * dt * 60;
-    var desired = f.wander;
+    var ax = Math.cos(f.wander), ay = Math.sin(f.wander);
 
     // Flee the cursor.
     var fleeing = 0;
     if (mouse.on) {
       var dx = head.x - mouse.x, dy = head.y - mouse.y;
-      var d = Math.sqrt(dx * dx + dy * dy);
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
       if (d < 240) {
-        desired = Math.atan2(dy, dx);
         fleeing = (240 - d) / 240;
+        ax += (dx / d) * fleeing * 3.2;
+        ay += (dy / d) * fleeing * 3.2;
       }
     }
 
-    // Stay in frame: steer back before drifting off the edges.
-    var m = 90;
-    if (head.x < m)        desired = 0;
-    else if (head.x > W - m) desired = Math.PI;
-    if (head.y < m)        desired = Math.PI / 2;
-    else if (head.y > H - m) desired = -Math.PI / 2;
+    /* Keep them in frame. This is summed with the flee vector rather than
+       replacing it — overriding would pin a fleeing fish against the wall and
+       it would just mill about next to the cursor. */
+    var m = 110;
+    if (head.x < m)          ax += (1 - head.x / m) * 2.6;
+    else if (head.x > W - m) ax -= (1 - (W - head.x) / m) * 2.6;
+    if (head.y < m)          ay += (1 - head.y / m) * 2.6;
+    else if (head.y > H - m) ay -= (1 - (H - head.y) / m) * 2.6;
+
+    var desired = Math.atan2(ay, ax);
 
     // Turn toward the desired heading by the short way round.
     var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
@@ -446,10 +450,10 @@
   /* ---- setup -------------------------------------------------------------- */
 
   function resize() {
-    var r = cv.getBoundingClientRect();
+    // Fixed to the viewport, so that's what we size to — not the document.
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = Math.max(1, Math.round(r.width));
-    H = Math.max(1, Math.round(r.height));
+    W = Math.max(1, window.innerWidth || 1200);
+    H = Math.max(1, window.innerHeight || 800);
     cv.width = W * dpr;
     cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -484,27 +488,25 @@
     rt = setTimeout(function () { readColors(); resize(); }, 180);
   });
 
-  masthead.addEventListener("pointermove", function (e) {
-    var r = cv.getBoundingClientRect();
-    mouse.x = e.clientX - r.left;
-    mouse.y = e.clientY - r.top;
+  // The canvas is fixed to the viewport, so client coordinates are already
+  // pond coordinates — no offset maths, and no recalculating on scroll.
+  window.addEventListener("pointermove", function (e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
     mouse.on = true;
-  });
-  masthead.addEventListener("pointerleave", function () { mouse.on = false; });
+  }, { passive: true });
 
-  // Click the water to splash. The canvas itself stays pointer-events:none so
-  // text is still selectable and the links underneath still work.
-  masthead.addEventListener("pointerdown", function (e) {
-    var r = cv.getBoundingClientRect();
-    splash(e.clientX - r.left, e.clientY - r.top);
+  document.addEventListener("pointerleave", function () { mouse.on = false; });
+
+  /* Click the water to splash. The canvas is pointer-events:none, so this
+     listens on the window and skips anything you were actually trying to use
+     — otherwise every link click and keystroke in the terminal throws water. */
+  window.addEventListener("pointerdown", function (e) {
+    if (e.target && e.target.closest &&
+        e.target.closest("a, button, input, textarea, select, .term")) return;
+    splash(e.clientX, e.clientY);
     if (reduced) { step(0.016); draw(); }
-  });
-
-  if ("IntersectionObserver" in window) {
-    new IntersectionObserver(function (es) {
-      es[0].isIntersecting ? start() : stop();
-    }, { threshold: 0 }).observe(masthead);
-  }
+  }, { passive: true });
   document.addEventListener("visibilitychange", function () {
     document.hidden ? stop() : start();
   });

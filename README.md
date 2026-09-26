@@ -1,8 +1,11 @@
 # Personal site
 
-A static personal site with **one source of truth**: [`resume.js`](resume.js).
-Everything on the page — the intro, jobs, projects, skills, writing, footer —
-is rendered from the object in that file.
+One screen, no scrolling. Your name and intro on the left, a terminal you can
+actually type into on the right, a koi pond behind both.
+
+Everything comes from **one source of truth**: [`resume.js`](resume.js). The
+left column, every terminal command, and the printable résumé all read the same
+object, so they cannot drift apart.
 
 No build step. No `npm install`. No dependencies.
 
@@ -12,10 +15,8 @@ No build step. No `npm install`. No dependencies.
 2. Change something.
 3. Save, and refresh the browser.
 
-That's the whole workflow. Double-click `index.html` to preview locally, or run
-`python3 -m http.server` in this folder and open <http://localhost:8000>.
-
-### What you can write
+Double-click `index.html` to preview locally, or run `python3 -m http.server`
+in this folder and open <http://localhost:8000>.
 
 Text fields accept a little inline markdown:
 
@@ -23,51 +24,95 @@ Text fields accept a little inline markdown:
 **bold**    *italic*    `code`    [link text](https://example.com)
 ```
 
+## Where your content shows up
+
+The page itself only shows your name, role, intro, "currently" line, and links.
+Everything else — experience, projects, writing, education — lives in the
+`sections` array and is reachable two ways:
+
+- **In the terminal.** `ls`, `ls experience`, `cat experience/meta`, `cat toolkit`.
+- **In print.** ⌘P lays the full document out as a clean one-page résumé.
+
+So adding a job to `resume.js` updates the terminal and your résumé at once.
+
 ### Adding a section
 
-Add an object to the `sections` array. Order in the array is order on the page.
-There are four types:
+Add an object to the `sections` array. Four types:
 
-| type        | use it for                    | shape                                        |
-| ----------- | ----------------------------- | -------------------------------------------- |
-| `"entries"` | jobs, projects                | `items: [{ org, role, period, url, bullets, tags }]` |
-| `"index"`   | writing, talks, education     | `items: [{ title, meta, url, note }]`        |
-| `"grid"`    | skills, tools                 | `groups: [{ label, items: [] }]`             |
-| `"prose"`   | anything in paragraphs        | `paragraphs: []`                             |
+| type        | use it for                | shape                                                |
+| ----------- | ------------------------- | ---------------------------------------------------- |
+| `"entries"` | jobs, projects            | `items: [{ org, role, period, url, bullets, tags }]` |
+| `"index"`   | writing, talks, education | `items: [{ title, meta, url, note }]`                |
+| `"grid"`    | skills, tools             | `groups: [{ label, items: [] }]`                     |
+| `"prose"`   | anything in paragraphs    | `paragraphs: []`                                     |
 
-Every field is optional — leave one out and it just doesn't render.
+Every field is optional — leave one out and it doesn't render.
 
-## Other things it does
+## The terminal
 
-- **Dark mode** — follows your OS, with a toggle in the top right that sticks.
-- **Résumé PDF** — the "Résumé" link runs `window.print()`, and the print
-  stylesheet reformats the page into a clean one-page résumé. Your site and your
-  résumé can never drift apart, because they're the same file.
-- **Accent colour** — one value, `accent`, at the top of `resume.js`.
+```
+help                    everything below
+whoami / about          who you are
+ls                      list sections
+ls experience           list what's in one
+cat experience/meta     print one entry
+cat toolkit             print a whole section
+links / open github     your links
+resume                  print dialog
+theme                   toggle light / dark
+clear                   wipe the screen
+```
+
+Tab completes, ↑/↓ walks history, ctrl-L clears. Section and entry names are
+slugs derived from your own data, so they stay correct automatically.
+
+## The pond
+
+Fixed to the viewport, so it stays put while narrow screens scroll. The koi
+wander, flee your cursor within 240px, and scatter when you click the water
+(clicks on links, buttons and the terminal are ignored). Colours come from CSS
+variables, so it restyles with the theme toggle.
+
+Tune it at the top of `style.css`: `--pond`, `--pond-deep`, `--pond-light`,
+`--koi-cream`, `--koi-dark`.
+
+## Responsive
+
+Above 62rem it's a fixed two-column screen with no page scroll. Below that the
+columns stack, the page scrolls normally, and the terminal takes a capped
+height so the intro isn't pushed off the top.
+
+Under `prefers-reduced-motion` the pond renders one static frame instead of
+animating — clicking still splashes.
+
+## Turning things off
+
+In `resume.js`:
+
+```js
+heroCanvas: false,   // remove the pond
+terminal:   false,   // remove the prompt
+```
 
 ## Files
 
 ```
-index.html   markup shell — rarely needs touching
+index.html   layout shell — rarely needs touching
 resume.js    ← your content lives here
-site.js      renders resume.js into the page
+site.js      renders resume.js into the left column and the print document
+terminal.js  the prompt (command layer is DOM-free and unit-testable)
+canvas.js    the koi pond
 style.css    the design
 ```
 
-## Deploying to GitHub Pages
+## Deploying
 
-Name the repo `vvinniev34.github.io` and it will be served at that URL
-from the default branch, no configuration needed.
+The repo is `vvinniev34.github.io`, so GitHub Pages serves it at
+<https://vvinniev34.github.io> from `main` with no configuration.
 
 ```bash
-# with the GitHub CLI (brew install gh && gh auth login):
-gh repo create vvinniev34.github.io --public --source=. --remote=origin --push
-
-# without it: create an empty repo of that name on github.com, then
-git remote add origin git@github.com:vvinniev34/vvinniev34.github.io.git
-git push -u origin main
+git commit -am "Update" && git push
 ```
 
-Pushing to `main` republishes the site. To use a custom domain later, add a
-`CNAME` file containing just the domain, and point a DNS `ALIAS`/`A` record at
-GitHub Pages.
+For a custom domain, add a `CNAME` file containing just the domain and point a
+DNS `ALIAS`/`A` record at GitHub Pages.

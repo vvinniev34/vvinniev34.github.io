@@ -7,10 +7,11 @@
   "use strict";
 
   var R = typeof RESUME !== "undefined" ? RESUME : null;
-  var root = document.getElementById("root");
+  var intro = document.getElementById("intro");   // the left column
+  var doc   = document.getElementById("doc");     // the print-only document
 
   if (!R) {
-    root.innerHTML = "<p>Couldn't find <code>resume.js</code>. Is it next to index.html?</p>";
+    intro.innerHTML = "<p>Couldn't find <code>resume.js</code>. Is it next to index.html?</p>";
     return;
   }
 
@@ -246,7 +247,7 @@
       });
     }
 
-    return el("section", { class: "section reveal" }, [
+    return el("section", { class: "section" }, [
       el("div", { class: "section__head" }, [
         el("span", {
           class: "section__num",
@@ -261,14 +262,17 @@
 
   /* ---- build -------------------------------------------------------------- */
 
-  root.appendChild(masthead());
+  intro.appendChild(masthead());
+
+  // Sections go into the print-only document, not the screen. The terminal is
+  // how you read them; ⌘P is how you take them away.
   var n = 0;
   (R.sections || []).forEach(function (s) {
     var node = section(s, n + 1);
-    if (node) { root.appendChild(node); n++; }
+    if (node) { doc.appendChild(node); n++; }
   });
   if (R.footer) {
-    root.appendChild(el("footer", { class: "footer reveal", html: inline(R.footer) }));
+    doc.appendChild(el("footer", { class: "footer", html: inline(R.footer) }));
   }
 
   /* ---- theme toggle ------------------------------------------------------- */
@@ -277,42 +281,6 @@
     var next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem("theme", next); } catch (e) {}
-  });
-
-  /* ---- sticky top bar ----------------------------------------------------- */
-
-  var topbar = document.getElementById("topbar");
-  document.getElementById("topbar-name").textContent = R.name || "";
-
-  var sentinel = document.querySelector(".masthead__name");
-  if (sentinel && "IntersectionObserver" in window) {
-    new IntersectionObserver(function (entries) {
-      topbar.classList.toggle("is-visible", !entries[0].isIntersecting);
-      topbar.setAttribute("aria-hidden", entries[0].isIntersecting ? "true" : "false");
-    }, { rootMargin: "-8px 0px 0px 0px" }).observe(sentinel);
-  }
-
-  /* ---- scroll reveal ------------------------------------------------------ */
-
-  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var reveals = document.querySelectorAll(".reveal");
-
-  if (reduced || !("IntersectionObserver" in window)) {
-    Array.prototype.forEach.call(reveals, function (n) { n.classList.add("is-in"); });
-  } else {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        e.target.classList.add("is-in");
-        io.unobserve(e.target);
-      });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
-    Array.prototype.forEach.call(reveals, function (n) { io.observe(n); });
-  }
-
-  // Everything is visible when printing, regardless of scroll position.
-  window.addEventListener("beforeprint", function () {
-    Array.prototype.forEach.call(reveals, function (n) { n.classList.add("is-in"); });
   });
 
   /* ---- live: your most recent public push ---------------------------------

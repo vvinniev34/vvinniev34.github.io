@@ -282,8 +282,8 @@
   var R = typeof RESUME !== "undefined" ? RESUME : null;
   if (!R || R.terminal === false) return;
 
-  var masthead = document.querySelector(".masthead");
-  if (!masthead) return;
+  var host = document.getElementById("termcol");
+  if (!host) return;
 
   function n(tag, cls, text) {
     var e = document.createElement(tag);
@@ -292,10 +292,7 @@
     return e;
   }
 
-  // Deliberately not `.reveal`: site.js has already collected its reveal
-  // targets by the time this runs, so the observer would never reach us and
-  // the box would sit at opacity 0 forever.
-  var wrap  = n("section", "term");
+  var wrap  = n("div", "term");
   var bar   = n("div", "term__bar");
   bar.appendChild(n("span", "term__dots"));
   bar.appendChild(n("span", "term__title", (slug(R.name) || "me") + " — zsh"));
@@ -316,7 +313,7 @@
   wrap.appendChild(bar);
   wrap.appendChild(body);
   wrap.appendChild(form);
-  masthead.parentNode.insertBefore(wrap, masthead.nextSibling);
+  host.appendChild(wrap);
 
   var shell = createShell(R, {
     open: function (u) { window.open(u, "_blank", "noopener"); },

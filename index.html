@@ -27,18 +27,24 @@
 
 <body>
 
-<header class="topbar" id="topbar" aria-hidden="true">
-  <span class="topbar__name" id="topbar-name"></span>
-</header>
-
 <button class="theme" id="theme" type="button" aria-label="Switch colour theme">
   <span class="theme__dot"></span>
 </button>
 
-<main id="root" class="page"></main>
+<main class="shell">
+  <section class="col col--intro" id="intro"></section>
+  <section class="col col--term"  id="termcol"></section>
+</main>
+
+<!--
+  The full document — experience, projects, writing, everything in resume.js.
+  Hidden on screen (the terminal is how you browse it) but laid out properly
+  for print, so ⌘P still gives a clean one-page résumé from the same source.
+-->
+<div class="doc" id="doc"></div>
 
 <noscript>
-  <div class="page">
+  <div class="shell">
     <p>This site renders from a small data file using JavaScript. Please enable it,
        or read <a href="resume.js">resume.js</a> directly — it's plain text.</p>
   </div>
