@@ -63,8 +63,8 @@
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var W = 0, H = 0, dpr = 1, t = 0;
-  var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
-  var cavities = [], jets = [];
+  var fish = [], ripples = [], drops = [], pellets = [];
+  var cavities = [], jets = [], foam = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0, dx: 0, dy: 0 };
   var running = false, raf = null, nextAmbient = 3;
   var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
@@ -1224,37 +1224,38 @@
   }
 
   function splash(x, y) {
-    // Four rings staggered outward, the leading one much wider than before.
-    addRipple(x, y, 230, 0,    1.35, 1);
-    addRipple(x, y, 165, 0.07, 1.05, 1);
-    addRipple(x, y, 105, 0.15, 0.8, 1);
-    addRipple(x, y, 58,  0.24, 0.55, 1);
+    /* One ring. Four staggered ones read as a target rather than a wave —
+       they sit concentric and evenly spaced, which water never does. The
+       only other ring comes from the rebound a beat later, at a different
+       size and a different moment, so the two never look like a pair. */
+    addRipple(x, y, 230, 0, 1.35, 1);
 
     /* The cavity. Something hitting water punches a depression before it
        throws anything up, and that dark hole is most of what makes an
        impact read as water rather than as a flash of light. */
     cavities.push({ x: x, y: y, age: 0, life: 0.5, r: 30 });
 
-    // foam thrown onto the rim of that cavity
-    bursts.push({ x: x, y: y, age: 0, life: 0.42, r: 34 });
+    /* Foam as separate torn flecks around the rim, not a bright disc in
+       the middle. The disc read as a flash of light; real thrown water
+       breaks up. */
+    for (var fi = 0; fi < 13; fi++) {
+      var fa = Math.random() * TAU;
+      var fr = 12 + Math.random() * 10;
+      foam.push({
+        x: x + Math.cos(fa) * fr,
+        y: y + Math.sin(fa) * fr,
+        vx: Math.cos(fa) * (0.9 + Math.random() * 1.7),
+        vy: Math.sin(fa) * (0.9 + Math.random() * 1.7),
+        r: 2.2 + Math.random() * 4,
+        rot: Math.random() * TAU,
+        age: 0, life: 0.34 + Math.random() * 0.3,
+      });
+    }
 
     /* And the rebound. The cavity collapses, drives a column back up the
        middle, and that column falls in again — a second, smaller splash a
        beat after the first. */
     jets.push({ x: x, y: y, age: -0.26, life: 0.46, done: false });
-
-    /* Throwback spray. Angles are fully random, not evenly spaced — an even
-       ring of identical spokes reads as a clock face, not a splash. */
-    var nc = 7 + (Math.random() * 4 | 0);
-    for (var c = 0; c < nc; c++) {
-      crowns.push({
-        x: x, y: y,
-        a: Math.random() * Math.PI * 2,
-        len: 7 + Math.random() * Math.random() * 30,   // mostly short, few long
-        speed: 0.7 + Math.random() * 0.8,
-        age: 0, life: 0.2 + Math.random() * 0.22,
-      });
-    }
 
     for (var i = 0; i < 26; i++) {
       var a = Math.random() * Math.PI * 2;
@@ -1313,6 +1314,13 @@
       cavities[cv2].age += dt;
       if (cavities[cv2].age >= cavities[cv2].life) cavities.splice(cv2, 1);
     }
+    for (var fk = foam.length - 1; fk >= 0; fk--) {
+      var fm = foam[fk];
+      fm.age += dt;
+      fm.x += fm.vx; fm.y += fm.vy;
+      fm.vx *= 0.9; fm.vy *= 0.9;
+      if (fm.age >= fm.life) foam.splice(fk, 1);
+    }
     for (var jt = jets.length - 1; jt >= 0; jt--) {
       var J = jets[jt];
       J.age += dt;
@@ -1327,14 +1335,6 @@
         }
       }
       if (J.age >= J.life) jets.splice(jt, 1);
-    }
-    for (var b = bursts.length - 1; b >= 0; b--) {
-      bursts[b].age += dt;
-      if (bursts[b].age >= bursts[b].life) bursts.splice(b, 1);
-    }
-    for (var c = crowns.length - 1; c >= 0; c--) {
-      crowns[c].age += dt;
-      if (crowns[c].age >= crowns[c].life) crowns.splice(c, 1);
     }
     for (var j = drops.length - 1; j >= 0; j--) {
       var d = drops[j];
@@ -1572,47 +1572,34 @@
       g.fillRect(cavity.x - cr, cavity.y - cr, cr * 2, cr * 2);
     });
 
-    /* The rebound column, from above a bright knot that swells and falls. */
+    /* Torn foam around the rim, all in one path. */
+    if (foam.length) {
+      g.fillStyle = C.wave;
+      g.globalAlpha = 0.6;
+      g.beginPath();
+      for (var fq = 0; fq < foam.length; fq++) {
+        var fm2 = foam[fq];
+        var fk2 = 1 - fm2.age / fm2.life;
+        var rr2 = fm2.r * fk2;
+        g.moveTo(fm2.x + rr2, fm2.y);
+        g.ellipse(fm2.x, fm2.y, rr2, rr2 * 0.65, fm2.rot, 0, TAU);
+      }
+      g.fill();
+    }
+
+    /* The rebound column, from above a swell of water rather than a light. */
     jets.forEach(function (J) {
       if (J.age < 0) return;
       var jk = J.age / J.life;
       var rise = Math.sin(Math.PI * jk);
       var jr = 7 + rise * 15;
-      var jg = g.createRadialGradient(J.x, J.y, 0, J.x, J.y, jr);
-      jg.addColorStop(0, C.wave);
-      jg.addColorStop(0.5, C.light);
+      var jg = g.createRadialGradient(J.x, J.y, jr * 0.3, J.x, J.y, jr);
+      jg.addColorStop(0, "transparent");
+      jg.addColorStop(0.6, C.light);
       jg.addColorStop(1, "transparent");
-      g.globalAlpha = rise * 0.85;
+      g.globalAlpha = rise * 0.45;
       g.fillStyle = jg;
       g.fillRect(J.x - jr, J.y - jr, jr * 2, jr * 2);
-    });
-
-    bursts.forEach(function (bu) {
-      var k = bu.age / bu.life;
-      var r = bu.r * (0.35 + k * 1.9);
-      /* Foam belongs on the RIM of the cavity, not across the middle of
-         it — a filled disc reads as a glow, an annulus reads as thrown
-         water. */
-      var grad = g.createRadialGradient(bu.x, bu.y, r * 0.45, bu.x, bu.y, r);
-      grad.addColorStop(0, "transparent");
-      grad.addColorStop(0.55, C.wave);
-      grad.addColorStop(1, "transparent");
-      g.globalAlpha = (1 - k) * (1 - k) * 0.8;
-      g.fillStyle = grad;
-      g.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
-    });
-
-    crowns.forEach(function (cr) {
-      var k = cr.age / cr.life;
-      var r0 = 4 + k * cr.len * cr.speed * 2.1;   // travels out with the rings
-      var r1 = r0 + cr.len * (1 - k) * 0.42;
-      g.beginPath();
-      g.moveTo(cr.x + Math.cos(cr.a) * r0, cr.y + Math.sin(cr.a) * r0);
-      g.lineTo(cr.x + Math.cos(cr.a) * r1, cr.y + Math.sin(cr.a) * r1);
-      g.strokeStyle = C.light;
-      g.globalAlpha = (1 - k) * (1 - k) * 0.6;
-      g.lineWidth = 1.7 * (1 - k) + 0.3;
-      g.stroke();
     });
 
     g.globalAlpha = 1;
