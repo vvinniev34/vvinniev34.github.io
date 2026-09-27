@@ -303,16 +303,16 @@
     head.x += Math.cos(swim) * f.speed * dt * 60;
     head.y += Math.sin(swim) * f.speed * dt * 60;
 
-    /* Wrap rather than turn back at the edge. The whole spine shifts
-       together — moving only the head would leave the body stretched right
-       across the screen — and only once the fish is completely out of
-       frame, so it slides off one side and back in on the other with
-       nothing popping into view. */
-    var span = (SEG - 1) * f.len + f.girth * 3;
-    if (head.x < -span)         shiftFish(f, W + 2 * span, 0);
-    else if (head.x > W + span) shiftFish(f, -(W + 2 * span), 0);
-    if (head.y < -span)         shiftFish(f, 0, H + 2 * span);
-    else if (head.y > H + span) shiftFish(f, 0, -(H + 2 * span));
+    /* Wrap at the boundary itself. The whole spine shifts together, since
+       moving the head alone would stretch the body across the screen.
+       Waiting until the fish was fully clear of the edge left it missing
+       for about three seconds, which is why the wrap was invisible — the
+       far side is drawn as well now (see drawFishWrapped), so crossing is
+       seamless and this can happen the instant the head passes the edge. */
+    if (head.x < 0)      shiftFish(f, W, 0);
+    else if (head.x > W) shiftFish(f, -W, 0);
+    if (head.y < 0)      shiftFish(f, 0, H);
+    else if (head.y > H) shiftFish(f, 0, -H);
 
     /* Each joint follows the one ahead at a fixed distance AND may only bend
        so far relative to the joint before it. Distance alone lets the chain
@@ -474,6 +474,23 @@
     }
 
     ctx.globalAlpha = 1;
+  }
+
+  /* A fish straddling an edge has to be drawn on both sides, or it
+     vanishes at one boundary and appears at the other. Only fish actually
+     near an edge pay for the second draw. */
+  function drawFishWrapped(f) {
+    drawFish(f);
+
+    var span = (SEG - 1) * f.len + f.girth * 3;
+    var hx = f.spine[0].x, hy = f.spine[0].y;
+    var dx = 0, dy = 0;
+    if (hx < span) dx = W; else if (hx > W - span) dx = -W;
+    if (hy < span) dy = H; else if (hy > H - span) dy = -H;
+
+    if (dx) { ctx.save(); ctx.translate(dx, 0);  drawFish(f); ctx.restore(); }
+    if (dy) { ctx.save(); ctx.translate(0, dy);  drawFish(f); ctx.restore(); }
+    if (dx && dy) { ctx.save(); ctx.translate(dx, dy); drawFish(f); ctx.restore(); }
   }
 
   /* ---- water -------------------------------------------------------------- */
@@ -763,11 +780,10 @@
       }
 
       // wrap, like everything else on the surface
-      var m = 24;
-      if (b.x < -m)         { b.x += W + 2 * m; b.trail.length = 0; }
-      else if (b.x > W + m) { b.x -= W + 2 * m; b.trail.length = 0; }
-      if (b.y < -m)         { b.y += H + 2 * m; b.trail.length = 0; }
-      else if (b.y > H + m) { b.y -= H + 2 * m; b.trail.length = 0; }
+      if (b.x < 0)      { b.x += W; b.trail.length = 0; }
+      else if (b.x > W) { b.x -= W; b.trail.length = 0; }
+      if (b.y < 0)      { b.y += H; b.trail.length = 0; }
+      else if (b.y > H) { b.y -= H; b.trail.length = 0; }
     }
   }
 
@@ -1595,7 +1611,7 @@
     ctx.clearRect(0, 0, W, H);
     drawWater();
     drawWakes();
-    fish.forEach(drawFish);
+    fish.forEach(drawFishWrapped);
     drawRipples();
     for (var pk = 0; pk < pellets.length; pk++) {
       var pl = pellets[pk];
