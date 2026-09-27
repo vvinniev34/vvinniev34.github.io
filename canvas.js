@@ -791,6 +791,11 @@
       b.x += Math.cos(b.a) * b.v;
       b.y += Math.sin(b.a) * b.v;
 
+      // carried by any wavefront crossing them, like the food and the pads
+      waveForce(b.x, b.y, _wf, false);
+      b.x += _wf[0] * 2.2;
+      b.y += _wf[1] * 2.2;
+
       /* A short wake behind it while it is actually moving. Drawn as a
          fading trail rather than spawned as ripples — one ripple per dart
          is right, but twenty striders each emitting a stream of them would
@@ -1250,6 +1255,23 @@
         r: 1.2 + Math.random() * 3.2,
         life: 0.45 + Math.random() * 0.5, age: 0,
       });
+    }
+
+    /* Striders sit on the surface film, so a splash throws them harder
+       than it does anything swimming under it. They were previously the
+       only thing in the pond that ignored it entirely. */
+    for (var bi = 0; bi < bugs.length; bi++) {
+      var bg = bugs[bi];
+      toroidal(bg.x - x, bg.y - y, _td);
+      var bdx = _td[0], bdy = _td[1];
+      var bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1;
+      if (bd < 420) {
+        var kick = 1 - bd / 420;
+        bg.a = Math.atan2(bdy, bdx) + (Math.random() - 0.5) * 0.5;
+        bg.v = Math.max(bg.v, 2.2 + kick * 3.4);
+        bg.wait = 0.2 + Math.random() * 0.5;
+        if (bg.panicCool <= 0) { bg.panicCool = 1.4; dimple(bg); }
+      }
     }
 
     // Everything nearby bolts, harder and from further out.
@@ -1788,6 +1810,7 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
+    bugs: function () { return bugs; },
     size: function () { return { W: W, H: H }; },
     caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
