@@ -84,7 +84,6 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
-    C.caustic   = v("--caustic", "236, 255, 246").split(",").map(Number);
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
@@ -458,63 +457,6 @@
   /* ---- water -------------------------------------------------------------- */
 
 
-  /* ---- caustics ------------------------------------------------------------
-     The bright shifting web on the bottom of a pond. Interfering sine waves
-     pushed through a high power, which collapses the smooth field into thin
-     filaments — that filament network is the thing that actually reads as
-     "water" rather than "grey gradient". Computed into a small buffer
-     (roughly W/9) and scaled up, because at full resolution this would cost
-     a million sines a frame.
-     -------------------------------------------------------------------------- */
-
-  var cCv = null, cCtx = null, cImg = null, CW = 0, CH = 0;
-
-  function initCaustics() {
-    CW = Math.max(40, Math.min(150, Math.round(W / 12)));
-    CH = Math.max(28, Math.min(105, Math.round(H / 12)));
-    cCv = document.createElement("canvas");
-    cCv.width = CW;
-    cCv.height = CH;
-    cCtx = cCv.getContext("2d");
-    cImg = cCtx.createImageData(CW, CH);
-
-    // Colour is constant; only the alpha channel changes per frame.
-    var d = cImg.data, r = C.caustic[0], g = C.caustic[1], b = C.caustic[2];
-    for (var i = 0; i < CW * CH; i++) {
-      d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b;
-    }
-  }
-
-  function renderCaustics() {
-    var d = cImg.data, k = 0;
-    var t1 = t * 0.55, t2 = t * 0.42, t3 = t * 0.70, t4 = t * 0.90;
-    var cx = 9.0, cy = 6.5;
-
-    for (var y = 0; y < CH; y++) {
-      var ny = (y / CH) * 13.0;
-      var dy = ny - cy;
-      for (var x = 0; x < CW; x++, k++) {
-        var nx = (x / CW) * 18.0;
-        var dx = nx - cx;
-        var v = Math.sin(nx + t1)
-              + Math.sin(ny * 1.13 - t2)
-              + Math.sin((nx + ny) * 0.78 + t3)
-              + Math.sin(Math.sqrt(dx * dx + dy * dy) * 1.6 - t4);
-
-        var f = Math.abs(Math.sin(v * 0.8));
-        var f2 = f * f, f4 = f2 * f2;      // f^8 — sharpens bands into threads
-        d[k * 4 + 3] = (f4 * f4 * 255) | 0;
-      }
-    }
-
-    cCtx.putImageData(cImg, 0, 0);
-  }
-
-  /* ---- pond floor ----------------------------------------------------------
-     Static mottling so the water has something to be transparent *to*.
-     Generated once per resize.
-     -------------------------------------------------------------------------- */
-
   function initBackdrop() {
     /* Everything that never changes — the water gradient, the silt, the
        stones, the corner vignette — is baked into one image at resize.
@@ -696,17 +638,16 @@
     g.clearRect(0, 0, W, H);
     g.imageSmoothingEnabled = true;
 
-    /* A single quiet caustic pass. This used to be two bright layers plus
-       two drifting sheen bands, which read as a separate weather system
-       moving over the pond — high contrast, distracting, and completely
-       indifferent to the cursor. All the visible life on the surface now
-       comes from ripples, which means all of it is deformable and all of
-       it responds to the mouse. This is just texture underneath. */
-    if (cCv) {
-      renderCaustics();
-      g.globalAlpha = 0.2;
-      g.drawImage(cCv, 0, 0, W, H);
-    }
+    /* Nothing here but ripples.
+
+       This layer used to also carry a caustic field: a procedural sine
+       pattern with a ~600px wavelength, redrawn across the whole screen
+       every frame. Those were the big soft swirls in the background, and
+       they were never ripples — no identity, no state, nothing that could
+       be disturbed by the cursor or by anything else. They were also the
+       single most expensive thing on the page. Every mark on the surface
+       is now an actual wavefront, which means all of it deforms, tears and
+       interferes. */
 
     drawWavefronts(g);
 
@@ -1115,6 +1056,91 @@
     var steps = Math.max(10, Math.min(32, Math.round(radius / 6)));
     g.strokeStyle = colour;
     g.lineWidth = width;
+    g.lineJoin = "round";
+    var open = false;
+    for (var i = 0; i <= steps; i++) {
+      var ang = (i / steps) * TAU;
+      var c = cutAt(rp, ang);
+      if (c > 0.6) {
+        if (open) { g.stroke(); open = false; }
+        continue;
+      }
+      var r = sampleR(rp, ang, radius, k);
+      var px = rp.x + Math.cos(ang) * r, py = rp.y + Math.sin(ang) * r;
+      if (!open) {
+        g.beginPath();
+        g.globalAlpha = alpha * (1 - c);
+        g.moveTo(px, py);
+        open = true;
+      } else {
+        g.lineTo(px, py);
+      }
+    }
+    if (open) g.stroke();
+  }
+
+  /* The body of a wave: a broad band of lifted light, with its trough
+     behind it. */
+  /* The body of a wave.
+
+     This used to be two radial gradients centred on the ripple — perfect
+     circles that never read def[] or cut[]. Since the soft body is the
+     visually dominant part of a large ripple, that meant dragging the
+     cursor through one did nothing you could see: the thin crest dented
+     while the broad shape it sat in stayed perfectly round.
+
+     It is now drawn with the same deformed path as the crest, just wide
+     and faint. The whole wave buckles and tears together, and concentric
+     strokes are cheaper than a 500px gradient fill besides. */
+  function swell(g, rp, k) {
+    var ws = Math.pow(1 - k, 1.1) * rp.weight;
+    if (ws < 0.04) return;
+    var band = 4 + rp.r * 0.16;
+
+    crest(g, rp, k, Math.max(1, rp.r - band * 0.95), 0.17 * ws, band * 1.15, C.deep);
+    crest(g, rp, k, rp.r + band * 0.30,              0.10 * ws, band * 1.30, C.light);
+    crest(g, rp, k, rp.r,                            0.21 * ws, band * 0.85, C.light);
+  }
+
+  /* ---- wavefronts --------------------------------------------------------
+     One ripple, drawn once, as one thing. It used to be four passes in two
+     places: a swell gradient and a trough gradient in the light layer, and
+     a crest stroke and a shadow stroke somewhere else entirely. They are
+     all the same physical feature — a band of lifted water — so they are
+     one routine now.
+
+     The soft band carries the mass of the wave and the stroke draws its
+     edge, which is also where the per-angle dents and tears show up.
+     -------------------------------------------------------------------------- */
+
+  var TAU = Math.PI * 2;
+
+  /* Radius of a ripple at a given angle: its own procedural buckle, plus
+     whatever the cursor has dented into it. */
+  function sampleR(rp, ang, radius, k) {
+    var warp = 1
+      + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
+      + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
+      + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
+    var f = ((ang + TAU) % TAU) / TAU * RN;
+    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+    return radius * warp + rp.def[i0] * (1 - m) + rp.def[i1] * m;
+  }
+
+  function cutAt(rp, ang) {
+    var f = ((ang + TAU) % TAU) / TAU * RN;
+    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+    return rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
+  }
+
+  /* One crest line. Walks the circumference and strokes the runs that
+     survive, so a torn ring comes out as separate arcs. An untouched ring
+     has cut[] all zero and simply emits one unbroken run — same code. */
+  function crest(g, rp, k, radius, alpha, width, colour) {
+    var steps = Math.max(10, Math.min(32, Math.round(radius / 6)));
+    g.strokeStyle = colour;
+    g.lineWidth = width;
+    g.lineJoin = "round";
     var open = false;
     for (var i = 0; i <= steps; i++) {
       var ang = (i / steps) * TAU;
@@ -1305,12 +1331,19 @@
        often rather than occasionally. They are ordinary ripples: the same
        kind the cursor makes and a click makes, so they dent, tear and get
        dragged about exactly the same way. */
+    /* Ambient ripples are the entire surface now, so they arrive often and
+       at a spread of sizes — mostly small, occasionally broad. Every one is
+       an ordinary ripple: it dents, tears, interferes with its neighbours
+       and answers to the cursor exactly like the ones you make yourself. */
     nextAmbient -= dt;
-    if (nextAmbient <= 0 && ripples.length < 34) {
-      nextAmbient = 0.55 + Math.random() * 1.5;
+    if (nextAmbient <= 0 && ripples.length < 40) {
+      nextAmbient = 0.2 + Math.random() * 0.55;
+      var big = Math.random() < 0.18;
       addRipple(Math.random() * W, Math.random() * H,
-                34 + Math.random() * 70, 0,
-                0.22 + Math.random() * 0.24, 0.3);
+                big ? 130 + Math.random() * 90 : 30 + Math.random() * 70,
+                0,
+                (big ? 0.3 : 0.18) + Math.random() * 0.22,
+                big ? 0.45 : 0.25);
     }
   }
 
@@ -1394,7 +1427,6 @@
     fgCv.width = W * dpr;  fgCv.height = H * dpr;
     bgCv.width = W * dpr;  bgCv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    initCaustics();
     initLight();
     makeBottom();
     initBackdrop();
@@ -1496,7 +1528,6 @@
 
   new MutationObserver(function () {
     readColors();
-    initCaustics();
     initBackdrop();       // stones and water tone are baked in
     var pals = palettes();
     fish.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
