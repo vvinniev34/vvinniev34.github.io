@@ -529,6 +529,48 @@
   /* ---- water -------------------------------------------------------------- */
 
 
+  /* ---- placement ---------------------------------------------------------
+     Pure Math.random() clumps: it leaves bald patches and piles things up
+     elsewhere, which is why the floor looked sparse in places however much
+     was added. A jittered grid gives even coverage while still looking
+     unplanned — one item per cell, positioned at random within it.
+
+     It also biases away from the centre column, because the card sits
+     there and most of what lands behind it is never seen. Not all of it:
+     the card is translucent and a bare strip behind it would be obvious.
+     -------------------------------------------------------------------------- */
+
+  function cardHalfWidth() {
+    return Math.min(W * 0.34, 350);
+  }
+
+  function scatter(count, spillBias) {
+    var cols = Math.max(1, Math.round(Math.sqrt(count * (W / H))));
+    var rows = Math.max(1, Math.ceil(count / cols));
+    var cw = W / cols, ch = H / rows;
+    var half = cardHalfWidth(), mid = W / 2;
+    var out = [];
+
+    for (var r = 0; r < rows && out.length < count; r++) {
+      for (var c = 0; c < cols && out.length < count; c++) {
+        var x = (c + Math.random()) * cw;
+        var y = (r + Math.random()) * ch;
+
+        // most of what falls behind the card moves out to a visible margin
+        if (spillBias !== 0 && Math.abs(x - mid) < half &&
+            Math.random() < (spillBias == null ? 0.6 : spillBias)) {
+          var leftRoom = mid - half, rightRoom = W - (mid + half);
+          if (leftRoom + rightRoom > 20) {
+            var pick = Math.random() * (leftRoom + rightRoom);
+            x = pick < leftRoom ? pick : (mid + half) + (pick - leftRoom);
+          }
+        }
+        out.push({ x: x, y: y });
+      }
+    }
+    return out;
+  }
+
   function initBackdrop() {
     /* Everything that never changes — the water gradient, the silt, the
        stones, the corner vignette — is baked into one image at resize.
@@ -544,8 +586,9 @@
     g.fillStyle = base;
     g.fillRect(0, 0, W, H);
 
-    for (var i = 0; i < 130; i++) {
-      var x = Math.random() * W, y = Math.random() * H;
+    var siltPts = scatter(130, 0.25);
+    for (var i = 0; i < siltPts.length; i++) {
+      var x = siltPts[i].x, y = siltPts[i].y;
       var r = 20 + Math.random() * (W / 5);
       var rg = g.createRadialGradient(x, y, 0, x, y, r);
       rg.addColorStop(0, "rgba(0,0,0," + (0.03 + Math.random() * 0.07).toFixed(3) + ")");
@@ -581,8 +624,9 @@
        covers almost everything — and ours was bare silt with stones on it.
        Irregular overlapping blobs rather than neat circles, because
        nothing on a pond bottom has an outline. */
-    for (var al = 0; al < 44; al++) {
-      var ax = Math.random() * W, ay = Math.random() * H;
+    var algaePts = scatter(44);
+    for (var al = 0; al < algaePts.length; al++) {
+      var ax = algaePts[al].x, ay = algaePts[al].y;
       var ar = 50 + Math.random() * 190;
       g.globalAlpha = 0.05 + Math.random() * 0.09;
       g.fillStyle = C.algae;
@@ -605,8 +649,9 @@
        uniform length, which reads as an asterisk rather than a plant.
        Now each clump leans one way, the blades fan within an arc rather
        than a full circle, and their lengths vary a lot. */
-    for (var rz = 0; rz < 46; rz++) {
-      var rx = Math.random() * W, ry = Math.random() * H;
+    var rosPts = scatter(46);
+    for (var rz = 0; rz < rosPts.length; rz++) {
+      var rx = rosPts[rz].x, ry = rosPts[rz].y;
       var blades = 5 + (Math.random() * 8 | 0);
       var reach = 12 + Math.random() * 38;
       var lean = Math.random() * Math.PI * 2;
@@ -632,8 +677,9 @@
     g.globalAlpha = 0.3;
     g.fillStyle = C.detritus;
     g.beginPath();
-    for (var lf = 0; lf < 70; lf++) {
-      var fx2 = Math.random() * W, fy2 = Math.random() * H;
+    var leafPts = scatter(70);
+    for (var lf = 0; lf < leafPts.length; lf++) {
+      var fx2 = leafPts[lf].x, fy2 = leafPts[lf].y;
       var fr2 = 3 + Math.random() * 7;
       g.moveTo(fx2 + fr2, fy2);
       g.ellipse(fx2, fy2, fr2, fr2 * (0.3 + Math.random() * 0.3),
@@ -645,8 +691,9 @@
     g.strokeStyle = C.detritus;
     g.lineWidth = 1.5;
     g.beginPath();
-    for (var tw = 0; tw < 14; tw++) {
-      var tx = Math.random() * W, ty = Math.random() * H;
+    var twigPts = scatter(14);
+    for (var tw = 0; tw < twigPts.length; tw++) {
+      var tx = twigPts[tw].x, ty = twigPts[tw].y;
       var ta = Math.random() * Math.PI * 2, tl = 24 + Math.random() * 60;
       g.moveTo(tx, ty);
       g.quadraticCurveTo(tx + Math.cos(ta) * tl * 0.5 + 8, ty + Math.sin(ta) * tl * 0.5,
@@ -678,8 +725,9 @@
        they read as noise. Each bed drops a cluster, plus a thin scatter
        everywhere else. */
     var beds = Math.round((W * H) / 190000);
-    for (var b = 0; b < beds; b++) {
-      var bx = Math.random() * W, by = Math.random() * H;
+    var bedPts = scatter(beds);
+    for (var b = 0; b < bedPts.length; b++) {
+      var bx = bedPts[b].x, by = bedPts[b].y;
       var spread = 60 + Math.random() * 130;
       var count = 10 + (Math.random() * 22 | 0);
       for (var c = 0; c < count; c++) {
@@ -695,11 +743,11 @@
         });
       }
     }
-    var loose = Math.round((W * H) / 24000);
-    for (var i = 0; i < loose; i++) {
+    var loosePts = scatter(Math.round((W * H) / 24000));
+    for (var i = 0; i < loosePts.length; i++) {
       stones.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
+        x: loosePts[i].x,
+        y: loosePts[i].y,
         r: 2 + Math.random() * Math.random() * 14,
         squash: 0.55 + Math.random() * 0.4,
         rot: Math.random() * Math.PI,
@@ -708,8 +756,8 @@
     }
 
     weeds = [];
-    var wn = Math.max(4, Math.round((W * H) / 130000));
-    for (var j = 0; j < wn; j++) {
+    var wPts = scatter(Math.max(4, Math.round((W * H) / 130000)));
+    for (var j = 0; j < wPts.length; j++) {
       var blades = [];
       var nb = 5 + (Math.random() * 6 | 0);
       for (var b = 0; b < nb; b++) {
@@ -724,8 +772,8 @@
       var reach = 0;
       for (var bb = 0; bb < blades.length; bb++) reach = Math.max(reach, blades[bb].len);
       weeds.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
+        x: wPts[j].x,
+        y: wPts[j].y,
         phase: Math.random() * Math.PI * 2,
         kick: 0,
         reach: reach,
@@ -851,12 +899,12 @@
   var bugs = [];
 
   function makeBugs() {
-    var n = Math.max(5, Math.min(14, Math.round((W * H) / 165000)));
     bugs = [];
-    for (var i = 0; i < n; i++) {
+    var bugPts = scatter(Math.max(5, Math.min(14, Math.round((W * H) / 165000))));
+    for (var i = 0; i < bugPts.length; i++) {
       bugs.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
+        x: bugPts[i].x,
+        y: bugPts[i].y,
         a: Math.random() * TAU,
         v: 0,
         wait: Math.random() * 12,
@@ -1002,9 +1050,9 @@
 
   function makeDuckweed() {
     weed2 = [];
-    var drifts = Math.max(2, Math.min(5, Math.round((W * H) / 420000)));
-    for (var d = 0; d < drifts; d++) {
-      var cx = Math.random() * W, cy = Math.random() * H;
+    var driftPts = scatter(Math.max(2, Math.min(5, Math.round((W * H) / 420000))));
+    for (var d = 0; d < driftPts.length; d++) {
+      var cx = driftPts[d].x, cy = driftPts[d].y;
       var spread = 70 + Math.random() * 130;
       var n = 10 + (Math.random() * 18 | 0);
       for (var i = 0; i < n; i++) {
@@ -1064,12 +1112,12 @@
   }
 
   function makePads() {
-    var n = Math.max(4, Math.min(12, Math.round((W * H) / 165000)));
     pads = [];
-    for (var i = 0; i < n; i++) {
+    var padPts = scatter(Math.max(4, Math.min(12, Math.round((W * H) / 165000))));
+    for (var i = 0; i < padPts.length; i++) {
       pads.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
+        x: padPts[i].x,
+        y: padPts[i].y,
         r: 27 + Math.random() * 30,
         rot: Math.random() * Math.PI * 2,
         phase: Math.random() * Math.PI * 2,
@@ -1903,6 +1951,7 @@
     fish: function () { return fish; },
     pads: function () { return pads; },
     weeds: function () { return weeds; },
+    stones: function () { return stones; },
     ripples: function () { return ripples; },
     bugs: function () { return bugs; },
     size: function () { return { W: W, H: H }; },
