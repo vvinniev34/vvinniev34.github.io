@@ -64,6 +64,7 @@
 
   var W = 0, H = 0, dpr = 1, t = 0;
   var fish = [], ripples = [], drops = [], bursts = [], crowns = [], pellets = [];
+  var cavities = [], jets = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0, dx: 0, dy: 0 };
   var running = false, raf = null, nextAmbient = 3;
   var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
@@ -1229,9 +1230,18 @@
     addRipple(x, y, 105, 0.15, 0.8, 1);
     addRipple(x, y, 58,  0.24, 0.55, 1);
 
-    // The white burst at the point of impact — this is most of what makes a
-    // click feel like it hit water rather than just starting an animation.
+    /* The cavity. Something hitting water punches a depression before it
+       throws anything up, and that dark hole is most of what makes an
+       impact read as water rather than as a flash of light. */
+    cavities.push({ x: x, y: y, age: 0, life: 0.5, r: 30 });
+
+    // foam thrown onto the rim of that cavity
     bursts.push({ x: x, y: y, age: 0, life: 0.42, r: 34 });
+
+    /* And the rebound. The cavity collapses, drives a column back up the
+       middle, and that column falls in again — a second, smaller splash a
+       beat after the first. */
+    jets.push({ x: x, y: y, age: -0.26, life: 0.46, done: false });
 
     /* Throwback spray. Angles are fully random, not evenly spaced — an even
        ring of identical spokes reads as a clock face, not a splash. */
@@ -1298,6 +1308,25 @@
       rp.life += dt;
       rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / RIPPLE_LIFE), 2.2));
       if (rp.life > RIPPLE_LIFE) ripples.splice(i, 1);
+    }
+    for (var cv2 = cavities.length - 1; cv2 >= 0; cv2--) {
+      cavities[cv2].age += dt;
+      if (cavities[cv2].age >= cavities[cv2].life) cavities.splice(cv2, 1);
+    }
+    for (var jt = jets.length - 1; jt >= 0; jt--) {
+      var J = jets[jt];
+      J.age += dt;
+      // at the top of its rise the column falls back and rings the water
+      if (!J.done && J.age >= J.life * 0.45) {
+        J.done = true;
+        addRipple(J.x, J.y, 74 + Math.random() * 34, 0, 0.5, 0.55);
+        for (var jd = 0; jd < 6; jd++) {
+          var ja = Math.random() * TAU, js = 0.8 + Math.random() * 1.8;
+          drops.push({ x: J.x, y: J.y, vx: Math.cos(ja) * js, vy: Math.sin(ja) * js,
+                       r: 0.9 + Math.random() * 1.4, life: 0.3 + Math.random() * 0.25, age: 0 });
+        }
+      }
+      if (J.age >= J.life) jets.splice(jt, 1);
     }
     for (var b = bursts.length - 1; b >= 0; b--) {
       bursts[b].age += dt;
@@ -1529,14 +1558,46 @@
 
     /* Spray thrown up by an impact belongs to the water as well, so it is
        drawn here rather than with the objects above. */
+    /* Cavity first, beneath everything: a dark bowl that opens fast and
+       closes slowly. */
+    cavities.forEach(function (cavity) {
+      var ck = cavity.age / cavity.life;
+      var cr = cavity.r * (0.5 + Math.pow(ck, 0.45) * 1.5);
+      var cg = g.createRadialGradient(cavity.x, cavity.y, 0, cavity.x, cavity.y, cr);
+      cg.addColorStop(0, C.deep);
+      cg.addColorStop(0.62, C.deep);
+      cg.addColorStop(1, "transparent");
+      g.globalAlpha = (1 - ck) * (1 - ck) * 0.7;
+      g.fillStyle = cg;
+      g.fillRect(cavity.x - cr, cavity.y - cr, cr * 2, cr * 2);
+    });
+
+    /* The rebound column, from above a bright knot that swells and falls. */
+    jets.forEach(function (J) {
+      if (J.age < 0) return;
+      var jk = J.age / J.life;
+      var rise = Math.sin(Math.PI * jk);
+      var jr = 7 + rise * 15;
+      var jg = g.createRadialGradient(J.x, J.y, 0, J.x, J.y, jr);
+      jg.addColorStop(0, C.wave);
+      jg.addColorStop(0.5, C.light);
+      jg.addColorStop(1, "transparent");
+      g.globalAlpha = rise * 0.85;
+      g.fillStyle = jg;
+      g.fillRect(J.x - jr, J.y - jr, jr * 2, jr * 2);
+    });
+
     bursts.forEach(function (bu) {
       var k = bu.age / bu.life;
       var r = bu.r * (0.35 + k * 1.9);
-      var grad = g.createRadialGradient(bu.x, bu.y, 0, bu.x, bu.y, r);
-      grad.addColorStop(0, C.light);
-      grad.addColorStop(0.35, C.light);
+      /* Foam belongs on the RIM of the cavity, not across the middle of
+         it — a filled disc reads as a glow, an annulus reads as thrown
+         water. */
+      var grad = g.createRadialGradient(bu.x, bu.y, r * 0.45, bu.x, bu.y, r);
+      grad.addColorStop(0, "transparent");
+      grad.addColorStop(0.55, C.wave);
       grad.addColorStop(1, "transparent");
-      g.globalAlpha = (1 - k) * (1 - k) * 0.7;
+      g.globalAlpha = (1 - k) * (1 - k) * 0.8;
       g.fillStyle = grad;
       g.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
     });
@@ -1559,14 +1620,28 @@
 
   function drawRipples() {
     ctx.lineCap = "round";
+    /* Droplets, each with a shadow offset beneath it — that separation is
+       what puts them above the surface rather than on it. Both passes are
+       one batched path. */
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#04140f";
+    ctx.beginPath();
     drops.forEach(function (d) {
-      var k = 1 - d.age / d.life;
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r * k, 0, Math.PI * 2);
-      ctx.fillStyle = C.light;
-      ctx.globalAlpha = 0.55 * k;
-      ctx.fill();
+      var rr = d.r * (1 - d.age / d.life);
+      ctx.moveTo(d.x + 3 + rr, d.y + 4);
+      ctx.arc(d.x + 3, d.y + 4, rr, 0, Math.PI * 2);
     });
+    ctx.fill();
+
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = C.wave;
+    ctx.beginPath();
+    drops.forEach(function (d) {
+      var rr = d.r * (1 - d.age / d.life);
+      ctx.moveTo(d.x + rr, d.y);
+      ctx.arc(d.x, d.y, rr, 0, Math.PI * 2);
+    });
+    ctx.fill();
 
     ctx.globalAlpha = 1;
   }
