@@ -695,7 +695,7 @@
   var bugs = [];
 
   function makeBugs() {
-    var n = Math.max(2, Math.min(6, Math.round((W * H) / 340000)));
+    var n = Math.max(4, Math.min(14, Math.round((W * H) / 150000)));
     bugs = [];
     for (var i = 0; i < n; i++) {
       bugs.push({
@@ -703,7 +703,7 @@
         y: Math.random() * H,
         a: Math.random() * TAU,
         v: 0,
-        wait: Math.random() * 4,
+        wait: Math.random() * 9,
         size: 0.8 + Math.random() * 0.5,
       });
     }
@@ -725,7 +725,7 @@
       b.v *= Math.max(0, 1 - dt * 7);        // a dart is short and sharp
       b.wait -= dt;
       if (b.wait <= 0) {
-        b.wait = 1.6 + Math.random() * 4.2;   // long rests, short darts
+        b.wait = 4 + Math.random() * 9;       // long rests, short darts
         b.a += (Math.random() - 0.5) * 1.8;
         b.v = 2.2 + Math.random() * 2.4;
         dimple(b);
@@ -803,12 +803,12 @@
   var beetles = [];
 
   function makeBeetles() {
-    var groups = Math.max(1, Math.min(3, Math.round((W * H) / 700000)));
+    var groups = Math.max(2, Math.min(5, Math.round((W * H) / 400000)));
     beetles = [];
     for (var gi = 0; gi < groups; gi++) {
       var hx = 90 + Math.random() * (W - 180);
       var hy = 90 + Math.random() * (H - 180);
-      var n = 2 + (Math.random() * 3 | 0);
+      var n = 3 + (Math.random() * 4 | 0);
       for (var i = 0; i < n; i++) {
         beetles.push({
           hx: hx, hy: hy,
@@ -863,7 +863,7 @@
       // their visible wake does the rest of the work
       b.emit -= dt;
       if (b.emit <= 0) {
-        b.emit = 5 + Math.random() * 5;
+        b.emit = 12 + Math.random() * 10;
         addRipple(b.x, b.y, 12 + Math.random() * 14, 0,
                   0.09 + Math.random() * 0.08, 0.1);
       }

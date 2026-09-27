@@ -129,8 +129,15 @@
       ]));
     }
 
+    return el("header", { class: "masthead" }, kids);
+  }
+
+  /* The links sit in their own bar under the terminal rather than inside
+     the intro, so the column reads: who you are, how to browse it, where
+     to go next. */
+  function linkbar() {
     if (R.links && R.links.length) {
-      kids.push(el("ul", { class: "linkrow" }, R.links.map(function (l) {
+      return el("ul", { class: "linkrow" }, R.links.map(function (l) {
         var node;
         if (l.action === "print") {
           node = el("button", { type: "button", text: l.label });
@@ -145,10 +152,9 @@
           });
         }
         return el("li", {}, [node]);
-      })));
+      }));
     }
-
-    return el("header", { class: "masthead" }, kids);
+    return null;
   }
 
   /* ---- section renderers -------------------------------------------------- */
@@ -263,6 +269,10 @@
   /* ---- build -------------------------------------------------------------- */
 
   intro.appendChild(masthead());
+  var bar = linkbar();
+  var linksHost = document.getElementById("links");
+  if (bar && linksHost) linksHost.appendChild(bar);
+  else if (linksHost) linksHost.style.display = "none";
 
   // Sections go into the print-only document, not the screen. The terminal is
   // how you read them; ⌘P is how you take them away.
