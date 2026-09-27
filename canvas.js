@@ -467,6 +467,62 @@
         d[k * 4 + 3] = (f4 * f4 * 255) | 0;
       }
     }
+
+    /* Now fold the ripples into the same field.
+
+       A ripple IS a deformation of the surface, and the caustic web is
+       light bent through that surface — so a ring belongs in this buffer,
+       not stroked on top of it. Drawing them as separate layers is why the
+       shifting colours appeared indifferent to the rings, and why the
+       colours kept visually burying them.
+
+       Only the annulus of each ring is touched, in buffer space, so this
+       costs a few thousand pixels rather than a full re-render. */
+    var scale = CW / W;
+    var touched = 0;
+    for (var ri = 0; ri < ripples.length && touched < 7; ri++) {
+      var rp = ripples[ri];
+      if (rp.delay > 0 || rp.r < 8) continue;
+      var kk = Math.min(1, rp.life / RIPPLE_LIFE);
+      var str = Math.pow(1 - kk, 1.15) * rp.weight;
+      if (str < 0.05) continue;
+      touched++;
+
+      var cxb = rp.x * scale, cyb = rp.y * scale;
+      var rb = rp.r * scale;
+      var bandb = (30 + rp.r * 0.22) * scale;
+
+      var x0 = Math.max(0, Math.floor(cxb - rb - bandb));
+      var x1 = Math.min(CW - 1, Math.ceil(cxb + rb + bandb));
+      var y0 = Math.max(0, Math.floor(cyb - rb - bandb));
+      var y1 = Math.min(CH - 1, Math.ceil(cyb + rb + bandb));
+
+      for (var by = y0; by <= y1; by++) {
+        var ddy = by - cyb;
+        for (var bx = x0; bx <= x1; bx++) {
+          var ddx = bx - cxb;
+          var dist = Math.sqrt(ddx * ddx + ddy * ddy);
+
+          var rHere = rb;
+          if (rp.def) {                       // dented rings bend the light too
+            var ang = Math.atan2(ddy, ddx);
+            var fi = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
+            var i0 = Math.floor(fi) % RN;
+            rHere += rp.def[i0] * scale;
+          }
+
+          var off = dist - rHere;
+          if (off < -bandb || off > bandb) continue;
+
+          // one full wave across the band: bright crest, dark trough
+          var mod = Math.cos((off / bandb) * Math.PI) * str * 235;
+          var at = (by * CW + bx) * 4 + 3;
+          var nv = d[at] + mod;
+          d[at] = nv < 0 ? 0 : (nv > 255 ? 255 : nv);
+        }
+      }
+    }
+
     cCtx.putImageData(cImg, 0, 0);
   }
 
@@ -670,46 +726,6 @@
       ctx.globalAlpha = 0.34;
       ctx.drawImage(cCv, -W * 0.13, -H * 0.17, W * 1.37, H * 1.41);
       ctx.restore();
-    }
-
-    /* Ripples bend the light web they pass over. Inside each wavefront's
-       annulus the caustic texture is redrawn magnified about the ripple's
-       centre, which reads as refraction — without this the rings floated
-       over an undisturbed pattern and looked like decals. Limited to the
-       larger rings; the cursor wake spawns far too many to do this for all
-       of them. */
-    if (cCv) {
-      var done = 0;
-      for (var ri = 0; ri < ripples.length && done < 5; ri++) {
-        var rf = ripples[ri];
-        if (rf.delay > 0 || rf.r < 46) continue;
-        var rk = Math.min(1, rf.life / RIPPLE_LIFE);
-        var strength = (1 - rk) * (1 - rk) * rf.weight;
-        if (strength < 0.08) continue;
-        done++;
-
-        var bw = 20 + rf.r * 0.16;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(rf.x, rf.y, rf.r + bw, 0, Math.PI * 2);
-        ctx.arc(rf.x, rf.y, Math.max(0, rf.r - bw), 0, Math.PI * 2, true);
-        ctx.clip("evenodd");
-
-        var mag = 1 + 0.16 * strength;
-        ctx.translate(rf.x, rf.y);
-        ctx.scale(mag, mag);
-        ctx.translate(-rf.x, -rf.y);
-
-        var bx = rf.x - rf.r - bw, by = rf.y - rf.r - bw;
-        var bs = (rf.r + bw) * 2;
-
-        ctx.globalAlpha = 0.5 * strength;
-        ctx.drawImage(cCv, 0, 0, W, H);
-        // and the drifting colour bands, so they buckle with the wave too
-        sheenBands(bx, by, bs, bs);
-        ctx.restore();
-      }
-      ctx.globalAlpha = 1;
     }
 
     sheenBands(0, 0, W, H);
@@ -1040,7 +1056,7 @@
       var k = Math.min(1, rp.life / RIPPLE_LIFE);
       // Gentler fade curve, so a ring stays legible for most of its life
       // and there is actually something on screen to disturb.
-      var a = Math.pow(1 - k, 1.25) * 0.74 * rp.weight;
+      var a = Math.pow(1 - k, 1.25) * 0.88 * rp.weight;
       if (a <= 0.004) return;
 
       /* An expanding circle reads as a graphic; a real wavefront buckles as
@@ -1362,6 +1378,7 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
+    caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
   };
 
