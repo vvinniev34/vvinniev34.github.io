@@ -101,48 +101,60 @@ body::after {
 
 ::selection { background: var(--accent); color: #fff; }
 
-/* ---- the column ----------------------------------------------------------
-   One centred column over the pond: who you are, then the terminal you
-   browse it with, then the links. Narrower than the old two-column split,
-   so there is considerably more open water either side.
+/* ---- the card ------------------------------------------------------------
+   One card, centred over the pond: who you are, the terminal you browse it
+   with, then the links. Centred rather than offset because a single panel
+   on a full-bleed background reads as deliberate in the middle and as a
+   mistake anywhere else.
    -------------------------------------------------------------------------- */
 
 .shell {
   position: relative;
   z-index: 3;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: clamp(1rem, 2vh, 1.6rem);
   min-height: 100dvh;
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: clamp(1.75rem, 5vh, 3.5rem) clamp(1.35rem, 5vw, 2.5rem);
+  padding: clamp(1.5rem, 4vh, 3rem) clamp(1.1rem, 5vw, 2.5rem);
 }
 
-.col { min-width: 0; }
-
-.col--intro {
-  display: flex;
-  flex-direction: column;
-  /* Lets the name size itself against this panel rather than the viewport. */
+.card {
+  width: 100%;
+  max-width: 41rem;
+  /* Lets the name size itself against the card rather than the viewport. */
   container-type: inline-size;
-  padding: clamp(1.5rem, 3vw, 2.25rem);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  -webkit-backdrop-filter: blur(5px) saturate(135%);
+          backdrop-filter: blur(5px) saturate(135%);
+  border: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.col--term { display: flex; min-height: 0; }
+.card__intro { display: block; padding: clamp(1.5rem, 3vw, 2.25rem); }
 
-/* Bounded, so the terminal never pushes the name off the top. */
-.term {
-  min-height: 12rem;
-  max-height: min(38dvh, 20rem);
-}
-
-/* The links are a slim bar under everything else. */
-.col--links {
+.card__term {
   display: flex;
-  justify-content: center;
-  padding: .7rem 1.1rem;
+  min-height: 0;
+  padding: 0 clamp(1.5rem, 3vw, 2.25rem);
+}
+
+/* Inside the card the terminal is an inset panel, not a second sheet of
+   glass — stacking glass on glass just muddies both. */
+.term {
+  flex: 1 1 auto;
+  min-height: 11rem;
+  max-height: min(34dvh, 18rem);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+  border-radius: 8px;
+}
+
+.card__links {
+  margin-top: clamp(1.1rem, 2.4vw, 1.6rem);
+  padding: .85rem clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
+  background: var(--wash);
 }
 
 .masthead { width: 100%; }
@@ -150,35 +162,22 @@ body::after {
 /* The document exists only so print can lay out a résumé from the same data. */
 .doc { display: none; }
 
-/* All three float on the pond as frosted glass. */
-.col--intro,
-.col--links,
-.term {
-  background: color-mix(in srgb, var(--bg) 68%, transparent);
-  -webkit-backdrop-filter: blur(5px) saturate(135%);
-          backdrop-filter: blur(5px) saturate(135%);
-  border: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
-  border-radius: 10px;
-}
-
-@supports not (backdrop-filter: blur(1px)) {
-  .col--intro, .col--links, .term {
-    background: color-mix(in srgb, var(--bg) 90%, transparent);
-  }
-}
-
-/* Fade the column up on load, a beat at a time. */
-.col--intro > .masthead > * {
+/* Fade the card's contents up on load, a beat at a time. */
+.card__intro > .masthead > * {
   animation: rise .75s var(--ease) backwards;
 }
-.col--intro > .masthead > *:nth-child(1) { animation-delay: .05s; }
-.col--intro > .masthead > *:nth-child(2) { animation-delay: .12s; }
-.col--intro > .masthead > *:nth-child(3) { animation-delay: .18s; }
-.col--intro > .masthead > *:nth-child(4) { animation-delay: .24s; }
-.col--intro > .masthead > *:nth-child(5) { animation-delay: .30s; }
+.card__intro > .masthead > *:nth-child(1) { animation-delay: .05s; }
+.card__intro > .masthead > *:nth-child(2) { animation-delay: .12s; }
+.card__intro > .masthead > *:nth-child(3) { animation-delay: .18s; }
+.card__intro > .masthead > *:nth-child(4) { animation-delay: .24s; }
+.card__intro > .masthead > *:nth-child(5) { animation-delay: .30s; }
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .card { background: color-mix(in srgb, var(--bg) 92%, transparent); }
 }
 
 /* Short screens: tighten the rhythm so it still fits without scrolling. */
@@ -188,12 +187,10 @@ body::after {
   .intro { font-size: .95rem; }
   .intro p { margin-bottom: .75rem; }
   .now { margin-top: 1rem; }
-  .col--intro { padding: clamp(1.15rem, 2.2vw, 1.75rem); }
-  .term { min-height: 9.5rem; max-height: min(32dvh, 15rem); }
-}
-
-@media (max-width: 34rem) {
-  .shell { padding-left: 1.1rem; padding-right: 1.1rem; }
+  .card__intro { padding: clamp(1.15rem, 2.2vw, 1.75rem); }
+  .card__term { padding: 0 clamp(1.15rem, 2.2vw, 1.75rem); }
+  .card__links { padding: .7rem clamp(1.15rem, 2.2vw, 1.75rem); }
+  .term { min-height: 9rem; max-height: min(30dvh, 14rem); }
 }
 
 /* ---- theme toggle --------------------------------------------------------- */
@@ -246,27 +243,6 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
    the compositor, which costs nothing, instead of being upscaled with a
    full-canvas drawImage every frame. */
 .pond--light { image-rendering: auto; }
-
-/* Both halves are frosted panels floating on the pond. The previous
-   treatment was a soft amorphous wash behind the text, which lined up with
-   nothing and read as an accident rather than a decision. Glass lets the koi
-   stay visible — blurred — straight through the page. */
-.col--intro,
-.term {
-  background: color-mix(in srgb, var(--bg) 68%, transparent);
-  -webkit-backdrop-filter: blur(5px) saturate(135%);
-          backdrop-filter: blur(5px) saturate(135%);
-  border: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
-  border-radius: 10px;
-}
-
-.col--intro {
-  padding: clamp(1.6rem, 2.8vw, 2.5rem);
-}
-
-@supports not (backdrop-filter: blur(1px)) {
-  .col--intro, .term { background: color-mix(in srgb, var(--bg) 90%, transparent); }
-}
 
 .masthead__name {
   margin: 0;
@@ -342,7 +318,6 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 .linkrow {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: .45rem 1.5rem;
   margin: 0;
   padding: 0;
@@ -692,7 +667,7 @@ code {
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
-  .col--intro > .masthead > * { animation: none; }
+  .card__intro > .masthead > * { animation: none; }
   .masthead__rule, .section__head::after { transform: scaleX(1); }
 }
 
@@ -718,9 +693,10 @@ code {
     max-width: none;
     padding: 0;
   }
-  .col--term, .col--links { display: none; }
-  .col--intro { display: block; overflow: visible; }
-  .col--intro > .masthead > * { animation: none !important; }
+  .card__term, .card__links { display: none; }
+  .card { display: block; }
+  .card__intro { padding: 0; }
+  .card__intro > .masthead > * { animation: none !important; }
   .doc { display: block; }
 
   :root { --step: 1.4rem; }
