@@ -1061,12 +1061,18 @@
       /*Response scales with the wave, and inversely with the pad: a big
          pad rides a small ripple almost unmoved, a small one gets tossed. */
       waveForce(p.x + p.ox, p.y + p.oy, _wf, false);
+      /* A pad floats; it is not on a spring. The restoring force used to
+         be stiff (0.06) and heavily damped (0.88), so a pad shoved by a
+         wave snapped back in under half a second like something on
+         elastic. Softer and far less damped now: it drifts back over a
+         couple of seconds, overshooting and settling, the way something
+         buoyant actually does. */
       var give = p.buoy * 4.2;
-      p.vx += _wf[0] * give - p.ox * 0.06;
-      p.vy += _wf[1] * give - p.oy * 0.06;
-      p.vx *= 0.88; p.vy *= 0.88;
+      p.vx += _wf[0] * give - p.ox * 0.018;
+      p.vy += _wf[1] * give - p.oy * 0.018;
+      p.vx *= 0.955; p.vy *= 0.955;
       p.ox += p.vx; p.oy += p.vy;
-      p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.12;
+      p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.05;
 
       ctx.save();
       ctx.translate(p.x + drift + p.ox, p.y + bob + p.oy);
