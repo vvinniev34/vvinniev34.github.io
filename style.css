@@ -35,6 +35,8 @@ html[data-theme="light"] {
   --stone-lit:  #c6d2c6;
   --weed:       #3a6b49;   /* submerged planting */
   --weed-tip:   #63a06d;
+  --algae:      #4f7a53;   /* matted growth on the floor */
+  --detritus:   #6b6047;   /* sunken leaves and twigs */
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
@@ -63,6 +65,8 @@ html[data-theme="dark"] {
   --stone-lit:  #6ba496;
   --weed:       #1f6b4b;   /* submerged planting */
   --weed-tip:   #44a877;
+  --algae:      #17452f;   /* matted growth on the floor */
+  --detritus:   #2a2a20;   /* sunken leaves and twigs */
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;

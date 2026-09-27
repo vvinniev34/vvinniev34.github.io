@@ -62,9 +62,9 @@
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  var TAU = Math.PI * 2;
   var W = 0, H = 0, dpr = 1, t = 0;
-  var fish = [], ripples = [], drops = [], pellets = [];
-  var jets = [], foam = [];
+  var fish = [], ripples = [], spray = [], pellets = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0, dx: 0, dy: 0 };
   var running = false, raf = null, nextAmbient = 3;
   var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
@@ -94,6 +94,8 @@
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
     C.weedTip   = v("--weed-tip", "#6d9e72");
+    C.algae     = v("--algae", "#4f7a53");
+    C.detritus  = v("--detritus", "#6b6047");
   }
 
   /* Koi varieties, loosely. Each is [body, patch] plus how blotchy it is. */
@@ -566,6 +568,78 @@
       g.restore();
     }
 
+    /* Matted algae. A real pond floor is mostly green — submerged growth
+       covers almost everything — and ours was bare silt with stones on it.
+       Irregular overlapping blobs rather than neat circles, because
+       nothing on a pond bottom has an outline. */
+    for (var al = 0; al < 26; al++) {
+      var ax = Math.random() * W, ay = Math.random() * H;
+      var ar = 50 + Math.random() * 190;
+      g.globalAlpha = 0.05 + Math.random() * 0.09;
+      g.fillStyle = C.algae;
+      g.beginPath();
+      for (var lobe = 0; lobe < 6; lobe++) {
+        var la = (lobe / 6) * Math.PI * 2 + Math.random() * 0.5;
+        var lr = ar * (0.45 + Math.random() * 0.55);
+        var lx = ax + Math.cos(la) * ar * 0.35;
+        var ly = ay + Math.sin(la) * ar * 0.35;
+        g.moveTo(lx + lr, ly);
+        g.ellipse(lx, ly, lr, lr * (0.5 + Math.random() * 0.5),
+                  Math.random() * Math.PI, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+
+    /* Submerged rosettes: static low growth, distinct from the blades that
+       sway. Most pond planting doesn't move much. */
+    for (var rz = 0; rz < 22; rz++) {
+      var rx = Math.random() * W, ry = Math.random() * H;
+      var blades = 7 + (Math.random() * 7 | 0);
+      var reach = 14 + Math.random() * 30;
+      g.globalAlpha = 0.3 + Math.random() * 0.22;
+      g.strokeStyle = Math.random() > 0.5 ? C.weed : C.algae;
+      g.lineWidth = 1 + Math.random() * 1.4;
+      g.beginPath();
+      for (var bl2 = 0; bl2 < blades; bl2++) {
+        var ba = Math.random() * Math.PI * 2;
+        var blen = reach * (0.5 + Math.random() * 0.7);
+        var bend = (Math.random() - 0.5) * 0.6;
+        g.moveTo(rx, ry);
+        g.quadraticCurveTo(rx + Math.cos(ba + bend) * blen * 0.6,
+                           ry + Math.sin(ba + bend) * blen * 0.6,
+                           rx + Math.cos(ba) * blen,
+                           ry + Math.sin(ba) * blen);
+      }
+      g.stroke();
+    }
+
+    /* Sunken leaves and twigs. */
+    g.globalAlpha = 0.3;
+    g.fillStyle = C.detritus;
+    g.beginPath();
+    for (var lf = 0; lf < 34; lf++) {
+      var fx2 = Math.random() * W, fy2 = Math.random() * H;
+      var fr2 = 3 + Math.random() * 7;
+      g.moveTo(fx2 + fr2, fy2);
+      g.ellipse(fx2, fy2, fr2, fr2 * (0.3 + Math.random() * 0.3),
+                Math.random() * Math.PI, 0, Math.PI * 2);
+    }
+    g.fill();
+
+    g.globalAlpha = 0.26;
+    g.strokeStyle = C.detritus;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    for (var tw = 0; tw < 7; tw++) {
+      var tx = Math.random() * W, ty = Math.random() * H;
+      var ta = Math.random() * Math.PI * 2, tl = 24 + Math.random() * 60;
+      g.moveTo(tx, ty);
+      g.quadraticCurveTo(tx + Math.cos(ta) * tl * 0.5 + 8, ty + Math.sin(ta) * tl * 0.5,
+                         tx + Math.cos(ta) * tl, ty + Math.sin(ta) * tl);
+    }
+    g.stroke();
+
+    g.globalAlpha = 1;
     var vg = g.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.3,
                                     W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
     vg.addColorStop(0, "transparent");
@@ -1070,6 +1144,28 @@
   /* `sub` is how far down the disturbance reaches: 1 shifts everything
      including the fish and the planting on the bottom, ~0.1 only ruffles
      the surface. The cursor's wake is shallow; a click goes all the way. */
+  /* Water thrown off the surface: torn foam, flung droplets, the spray a
+     rebound sends back up. Three separate systems, three update loops and
+     three draw passes, differing only in size, shape and lifetime. One
+     thing now — the same move as every ripple being one thing regardless
+     of what made it. */
+  function sprayBurst(x, y, n, o) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * TAU;
+      var sp = o.speed * (0.5 + Math.random());
+      spray.push({
+        x: x + Math.cos(a) * (o.offset || 0) * Math.random(),
+        y: y + Math.sin(a) * (o.offset || 0) * Math.random(),
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        r: o.r * (0.6 + Math.random() * 0.8),
+        squash: o.squash, rot: Math.random() * TAU,
+        ring: !!o.ring, age: 0,
+        life: o.life * (0.7 + Math.random() * 0.6),
+        delay: o.delay || 0,
+      });
+    }
+  }
+
   function addRipple(x, y, max, delay, weight, sub) {
     /* Deform state is allocated up front for every ripple, not lazily on
        first contact. Lazily meant a ring switched rendering path the moment
@@ -1230,38 +1326,18 @@
        size and a different moment, so the two never look like a pair. */
     addRipple(x, y, 230, 0, 1.35, 1);
 
-    /* Foam as separate torn flecks around the rim, not a bright disc in
-       the middle. The disc read as a flash of light; real thrown water
-       breaks up. */
-    for (var fi = 0; fi < 13; fi++) {
-      var fa = Math.random() * TAU;
-      var fr = 12 + Math.random() * 10;
-      foam.push({
-        x: x + Math.cos(fa) * fr,
-        y: y + Math.sin(fa) * fr,
-        vx: Math.cos(fa) * (0.9 + Math.random() * 1.7),
-        vy: Math.sin(fa) * (0.9 + Math.random() * 1.7),
-        r: 2.2 + Math.random() * 4,
-        rot: Math.random() * TAU,
-        age: 0, life: 0.34 + Math.random() * 0.3,
-      });
-    }
+    /* Foam torn off the rim, and droplets flung out of it. */
+    sprayBurst(x, y, 13, { speed: 1.8, r: 3.4, squash: 0.65,
+                           life: 0.44, offset: 22 });
+    sprayBurst(x, y, 24, { speed: 4.2, r: 1.9, squash: 1,
+                           life: 0.6, ring: true });
 
-    /* And the rebound. The cavity collapses, drives a column back up the
-       middle, and that column falls in again — a second, smaller splash a
-       beat after the first. */
-    jets.push({ x: x, y: y, age: -0.26, life: 0.46, done: false });
-
-    for (var i = 0; i < 26; i++) {
-      var a = Math.random() * Math.PI * 2;
-      var sp = 2.4 + Math.random() * 6.2;
-      drops.push({
-        x: x, y: y,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        r: 1.2 + Math.random() * 3.2,
-        life: 0.45 + Math.random() * 0.5, age: 0,
-      });
-    }
+    /* The rebound — water driven back up the middle falls in again a beat
+       later. It is just the same two primitives with a delay on them; no
+       separate machinery for it any more. */
+    addRipple(x, y, 95, 0.45, 0.5, 0.55);
+    sprayBurst(x, y, 7, { speed: 1.6, r: 1.6, squash: 1,
+                          life: 0.5, ring: true, delay: 0.45 });
 
     /* Striders sit on the surface film, so a splash throws them harder
        than it does anything swimming under it. They were previously the
@@ -1305,36 +1381,22 @@
       rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / RIPPLE_LIFE), 2.2));
       if (rp.life > RIPPLE_LIFE) ripples.splice(i, 1);
     }
-    for (var fk = foam.length - 1; fk >= 0; fk--) {
-      var fm = foam[fk];
-      fm.age += dt;
-      fm.x += fm.vx; fm.y += fm.vy;
-      fm.vx *= 0.9; fm.vy *= 0.9;
-      if (fm.age >= fm.life) foam.splice(fk, 1);
-    }
-    for (var jt = jets.length - 1; jt >= 0; jt--) {
-      var J = jets[jt];
-      J.age += dt;
-      // at the top of its rise the column falls back and rings the water
-      if (!J.done && J.age >= J.life * 0.45) {
-        J.done = true;
-        addRipple(J.x, J.y, 74 + Math.random() * 34, 0, 0.5, 0.55);
-        for (var jd = 0; jd < 6; jd++) {
-          var ja = Math.random() * TAU, js = 0.8 + Math.random() * 1.8;
-          drops.push({ x: J.x, y: J.y, vx: Math.cos(ja) * js, vy: Math.sin(ja) * js,
-                       r: 0.9 + Math.random() * 1.4, life: 0.3 + Math.random() * 0.25, age: 0 });
-        }
-      }
-      if (J.age >= J.life) jets.splice(jt, 1);
-    }
-    for (var j = drops.length - 1; j >= 0; j--) {
-      var d = drops[j];
-      d.age += dt;
-      d.x += d.vx; d.y += d.vy;
-      d.vx *= 0.94; d.vy *= 0.94;
-      if (d.age >= d.life) {
-        addRipple(d.x, d.y, 10 + Math.random() * 14, 0, 0.4, 0.5);
-        drops.splice(j, 1);
+    for (var sk = spray.length - 1; sk >= 0; sk--) {
+      var sp = spray[sk];
+      if (sp.delay > 0) { sp.delay -= dt; continue; }
+      sp.age += dt;
+      /* Carried by the cursor's wake and by any other wavefront, exactly
+         like the food and the duckweed. Spray was the last loose thing on
+         the surface that ignored the current entirely. */
+      waveForce(sp.x, sp.y, _wf, false);
+      sp.vx += _wf[0] * 1.2;
+      sp.vy += _wf[1] * 1.2;
+      sp.x += sp.vx; sp.y += sp.vy;
+      sp.vx *= 0.92; sp.vy *= 0.92;
+      if (sp.age >= sp.life) {
+        // a droplet that lands rings the water; foam just dissolves
+        if (sp.ring) addRipple(sp.x, sp.y, 10 + Math.random() * 14, 0, 0.4, 0.5);
+        spray.splice(sk, 1);
       }
     }
   }
@@ -1350,7 +1412,6 @@
      edge, which is also where the per-angle dents and tears show up.
      -------------------------------------------------------------------------- */
 
-  var TAU = Math.PI * 2;
 
   /* Per-angle geometry for one ripple, computed once a frame and shared by
      all four of its strokes. Each stroke used to re-derive the same three
@@ -1439,7 +1500,6 @@
      edge, which is also where the per-angle dents and tears show up.
      -------------------------------------------------------------------------- */
 
-  var TAU = Math.PI * 2;
 
   /* Radius of a ripple at a given angle: its own procedural buckle, plus
      whatever the cursor has dented into it. */
@@ -1547,65 +1607,28 @@
       crest(g, rp, rp.r, a * 0.92, lw, C.wave);
     }
 
-    /* Spray thrown up by an impact belongs to the water as well, so it is
-       drawn here rather than with the objects above. */
-    /* Torn foam around the rim, all in one path. */
-    if (foam.length) {
-      g.fillStyle = C.wave;
-      g.globalAlpha = 0.6;
-      g.beginPath();
-      for (var fq = 0; fq < foam.length; fq++) {
-        var fm2 = foam[fq];
-        var fk2 = 1 - fm2.age / fm2.life;
-        var rr2 = fm2.r * fk2;
-        g.moveTo(fm2.x + rr2, fm2.y);
-        g.ellipse(fm2.x, fm2.y, rr2, rr2 * 0.65, fm2.rot, 0, TAU);
-      }
-      g.fill();
-    }
-
-    /* The rebound column, from above a swell of water rather than a light. */
-    jets.forEach(function (J) {
-      if (J.age < 0) return;
-      var jk = J.age / J.life;
-      var rise = Math.sin(Math.PI * jk);
-      var jr = 7 + rise * 15;
-      var jg = g.createRadialGradient(J.x, J.y, jr * 0.3, J.x, J.y, jr);
-      jg.addColorStop(0, "transparent");
-      jg.addColorStop(0.6, C.light);
-      jg.addColorStop(1, "transparent");
-      g.globalAlpha = rise * 0.45;
-      g.fillStyle = jg;
-      g.fillRect(J.x - jr, J.y - jr, jr * 2, jr * 2);
-    });
-
     g.globalAlpha = 1;
   }
 
   function drawRipples() {
     ctx.lineCap = "round";
-    /* Droplets, each with a shadow offset beneath it — that separation is
-       what puts them above the surface rather than on it. Both passes are
-       one batched path. */
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = "#04140f";
-    ctx.beginPath();
-    drops.forEach(function (d) {
-      var rr = d.r * (1 - d.age / d.life);
-      ctx.moveTo(d.x + 3 + rr, d.y + 4);
-      ctx.arc(d.x + 3, d.y + 4, rr, 0, Math.PI * 2);
-    });
-    ctx.fill();
-
-    ctx.globalAlpha = 0.72;
-    ctx.fillStyle = C.wave;
-    ctx.beginPath();
-    drops.forEach(function (d) {
-      var rr = d.r * (1 - d.age / d.life);
-      ctx.moveTo(d.x + rr, d.y);
-      ctx.arc(d.x, d.y, rr, 0, Math.PI * 2);
-    });
-    ctx.fill();
+    /* All spray in one path: torn foam, flung droplets and rebound alike.
+       Flat, with no shadow under them — the offset shadow read as a solid
+       three-dimensional object in an otherwise flat scene. */
+    if (spray.length) {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = C.wave;
+      ctx.beginPath();
+      for (var si = 0; si < spray.length; si++) {
+        var sp2 = spray[si];
+        if (sp2.delay > 0) continue;
+        var rr = sp2.r * (1 - sp2.age / sp2.life);
+        if (rr <= 0.05) continue;
+        ctx.moveTo(sp2.x + rr, sp2.y);
+        ctx.ellipse(sp2.x, sp2.y, rr, rr * sp2.squash, sp2.rot, 0, TAU);
+      }
+      ctx.fill();
+    }
 
     ctx.globalAlpha = 1;
   }
