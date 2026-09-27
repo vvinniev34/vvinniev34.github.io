@@ -203,7 +203,7 @@
     if (f.rise > 0) {
       f.rise -= dt;
       if (f.rise <= 0) f.rise = 0;
-    } else if (Math.random() < 0.02 * dt) {
+    } else if (Math.random() < 0.013 * dt) {
       f.rise = 1.1 + Math.random() * 0.9;
       addRipple(f.spine[0].x, f.spine[0].y,
                 26 + f.girth * 5, 0,
@@ -788,6 +788,180 @@
       ctx.fill();
 
       ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- whirligig beetles ----------------------------------------------
+     The other thing you find on a pond surface, and a deliberate contrast
+     to the striders: where a strider rests and then darts in a straight
+     line, a whirligig never stops, spinning in tight erratic loops. They
+     gather in loose clusters, so each keeps a home point it circles near.
+     Shiny black from above, with a bright specular dot.
+     -------------------------------------------------------------------------- */
+
+  var beetles = [];
+
+  function makeBeetles() {
+    var groups = Math.max(1, Math.min(3, Math.round((W * H) / 700000)));
+    beetles = [];
+    for (var gi = 0; gi < groups; gi++) {
+      var hx = 90 + Math.random() * (W - 180);
+      var hy = 90 + Math.random() * (H - 180);
+      var n = 2 + (Math.random() * 3 | 0);
+      for (var i = 0; i < n; i++) {
+        beetles.push({
+          hx: hx, hy: hy,
+          x: hx + (Math.random() - 0.5) * 90,
+          y: hy + (Math.random() - 0.5) * 90,
+          a: Math.random() * TAU,
+          v: 1.1 + Math.random() * 1.1,
+          turn: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4),
+          flip: 0.2 + Math.random() * 0.4,
+          emit: Math.random() * 4,
+          size: 0.85 + Math.random() * 0.45,
+        });
+      }
+    }
+  }
+
+  function updateBeetles(dt) {
+    for (var i = 0; i < beetles.length; i++) {
+      var b = beetles[i];
+
+      // the constant, jittery turning that makes a whirligig a whirligig
+      b.flip -= dt;
+      if (b.flip <= 0) {
+        b.flip = 0.12 + Math.random() * 0.45;
+        b.turn = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 5);
+      }
+      b.a += b.turn * dt;
+
+      // stay near the group
+      var hx = b.hx - b.x, hy = b.hy - b.y;
+      var hd = Math.sqrt(hx * hx + hy * hy);
+      if (hd > 75) {
+        var want = Math.atan2(hy, hx);
+        b.a += Math.atan2(Math.sin(want - b.a), Math.cos(want - b.a)) * 1.6 * dt;
+      }
+
+      // scatter from the cursor
+      var fx = b.x - mouse.x, fy = b.y - mouse.y;
+      var fd = Math.sqrt(fx * fx + fy * fy) || 1;
+      if (mouse.on && fd < 120) {
+        var away = Math.atan2(fy, fx);
+        b.a += Math.atan2(Math.sin(away - b.a), Math.cos(away - b.a)) * 5 * dt;
+        b.v += (3.4 - b.v) * 3 * dt;
+      } else {
+        b.v += ((1.1 + b.size) - b.v) * 1.4 * dt;
+      }
+
+      b.x += Math.cos(b.a) * b.v;
+      b.y += Math.sin(b.a) * b.v;
+
+      // they are always moving, so they only occasionally leave a ring —
+      // their visible wake does the rest of the work
+      b.emit -= dt;
+      if (b.emit <= 0) {
+        b.emit = 5 + Math.random() * 5;
+        addRipple(b.x, b.y, 12 + Math.random() * 14, 0,
+                  0.09 + Math.random() * 0.08, 0.1);
+      }
+    }
+  }
+
+  function drawBeetles() {
+    for (var i = 0; i < beetles.length; i++) {
+      var b = beetles[i];
+      var s = b.size;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.a);
+
+      // the little V of disturbed water it drags behind
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = C.light;
+      ctx.lineWidth = 0.9;
+      for (var q = -1; q <= 1; q += 2) {
+        ctx.beginPath();
+        ctx.moveTo(-2 * s, 0);
+        ctx.quadraticCurveTo(-8 * s, q * 2 * s, -15 * s, q * 6 * s);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = C.bug;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3.4 * s, 2.3 * s, 0, 0, TAU);
+      ctx.fill();
+
+      // shiny carapace
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = C.light;
+      ctx.beginPath();
+      ctx.ellipse(0.7 * s, -0.7 * s, 1.2 * s, 0.7 * s, 0, 0, TAU);
+      ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---- duckweed ---------------------------------------------------------
+     Drifts of tiny floating leaves. They cost almost nothing and they do
+     something no other element does: they make the water's movement
+     legible. A wavefront passing underneath visibly carries them, so you
+     can read the shape of a ripple from what it moves rather than only
+     from the ring itself.
+     -------------------------------------------------------------------------- */
+
+  var weed2 = [];
+
+  function makeDuckweed() {
+    weed2 = [];
+    var drifts = Math.max(2, Math.min(5, Math.round((W * H) / 420000)));
+    for (var d = 0; d < drifts; d++) {
+      var cx = Math.random() * W, cy = Math.random() * H;
+      var spread = 70 + Math.random() * 130;
+      var n = 14 + (Math.random() * 26 | 0);
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * TAU, r = Math.pow(Math.random(), 0.6) * spread;
+        weed2.push({
+          x: cx + Math.cos(a) * r,
+          y: cy + Math.sin(a) * r,
+          vx: 0, vy: 0,
+          r: 1.6 + Math.random() * 2.2,
+          rot: Math.random() * TAU,
+          tone: Math.random(),
+        });
+      }
+    }
+  }
+
+  function updateDuckweed(dt) {
+    for (var i = 0; i < weed2.length; i++) {
+      var p = weed2[i];
+      waveForce(p.x, p.y, _wf, false);
+      p.vx += _wf[0] * 1.5;
+      p.vy += _wf[1] * 1.5;
+      // a slow prevailing drift, so a mat is never completely static
+      p.vx += Math.cos(t * 0.05 + p.rot) * 0.004;
+      p.vy += Math.sin(t * 0.04 + p.rot) * 0.004;
+      p.vx *= 0.93; p.vy *= 0.93;
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -20) p.x += W + 40; else if (p.x > W + 20) p.x -= W + 40;
+      if (p.y < -20) p.y += H + 40; else if (p.y > H + 20) p.y -= H + 40;
+    }
+  }
+
+  function drawDuckweed() {
+    for (var i = 0; i < weed2.length; i++) {
+      var p = weed2[i];
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = p.tone > 0.7 ? C.padRim : C.pad;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, p.rot, 0, TAU);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -1409,6 +1583,8 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
     updateBugs(dt);
+    updateBeetles(dt);
+    updateDuckweed(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
        distance travelled rather than per frame, so the trail is even at any
@@ -1516,7 +1692,9 @@
 
     ctx.globalAlpha = 1;
 
+    drawDuckweed();      // floating leaves, carried by the waves
     drawBugs();          // on the surface film, above the fish
+    drawBeetles();
     drawPads();          // floating on the surface, so over the fish
   }
 
@@ -1561,6 +1739,8 @@
     makePads();
     padBuoyancy();
     makeBugs();
+    makeBeetles();
+    makeDuckweed();
     stock();
   }
 
