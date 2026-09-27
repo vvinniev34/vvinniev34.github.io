@@ -82,7 +82,6 @@
     C.deep      = v("--pond-deep", "#d4e0db");
     C.light     = v("--pond-light", "rgba(255,255,255,.55)");
     C.wave      = v("--wave", "rgba(255,255,255,.95)");
-    C.waveDark  = v("--wave-dark", "rgba(46,88,76,.5)");
     C.accent    = v("--accent", "#b4451f");
     C.cream     = v("--koi-cream", "#fdfaf4");
     C.dark      = v("--koi-dark", "#2c2a26");
@@ -1327,10 +1326,10 @@
     addRipple(x, y, 230, 0, 1.35, 1);
 
     /* Foam torn off the rim, and droplets flung out of it. */
-    sprayBurst(x, y, 13, { speed: 1.8, r: 3.4, squash: 0.65,
-                           life: 0.44, offset: 22 });
-    sprayBurst(x, y, 24, { speed: 4.2, r: 1.9, squash: 1,
-                           life: 0.6, ring: true });
+    sprayBurst(x, y, 13, { speed: 1.1, r: 3.4, squash: 0.65,
+                           life: 0.4, offset: 16 });
+    sprayBurst(x, y, 24, { speed: 2.3, r: 1.9, squash: 1,
+                           life: 0.42, ring: true });
 
     /* The rebound — water driven back up the middle falls in again a beat
        later. It is just the same two primitives with a delay on them; no
@@ -1389,8 +1388,11 @@
          like the food and the duckweed. Spray was the last loose thing on
          the surface that ignored the current entirely. */
       waveForce(sp.x, sp.y, _wf, false);
-      sp.vx += _wf[0] * 1.2;
-      sp.vy += _wf[1] * 1.2;
+      /* Light coupling on purpose. At 1.2 a droplet was shoved again on
+         every frame the splash's own 230px ring swept over it, so instead
+         of settling it rode the wavefront all the way out. */
+      sp.vx += _wf[0] * 0.3;
+      sp.vy += _wf[1] * 0.3;
       sp.x += sp.vx; sp.y += sp.vy;
       sp.vx *= 0.92; sp.vy *= 0.92;
       if (sp.age >= sp.life) {
@@ -1481,12 +1483,23 @@
     if (ws < 0.04) return;
     var band = 4 + rp.r * 0.16;
 
+    /* A ring narrower than its own band has no annulus to draw. Stroking
+       one anyway painted a 5px-wide circle of the darkest pond colour
+       around a 1px radius — a solid dark dot at the centre. Since every
+       ripple is born at r≈0, every single one flashed a black speck
+       before it grew. That is where they came from. */
+    if (rp.r < band * 1.4) return;
+
     /* Stroke width is capped: a 230px ripple was painting a 61px-wide band
-       around its whole circumference, ~88k pixels for one stroke. */
-    var trough = Math.min(band * 1.15, 26);
-    var body   = Math.min(band * 1.5, 34);
-    crest(g, rp, Math.max(1, rp.r - band * 0.95), 0.19 * ws, trough, C.deep);
-    crest(g, rp, rp.r,                            0.3 * ws,  body,   C.light);
+       around its whole circumference, ~88k pixels for one stroke. Also
+       bounded by the radius, so a small ring can never be over-stroked
+       into a blob. */
+    /* Light only. There used to be a darker pass behind the crest for
+       relief, which trailed every ripple with a dark ring — a shadow the
+       water dragged around after it. Water lifting does brighten; it does
+       not leave a dark wake. */
+    var body = Math.min(band * 1.5, 34, rp.r * 0.9);
+    crest(g, rp, rp.r, 0.34 * ws, body, C.light);
   }
 
   /* ---- wavefronts --------------------------------------------------------
@@ -1601,10 +1614,10 @@
       if (rp.r > 4) swell(g, rp, k);
 
       var a = Math.pow(1 - k, 1.25) * 0.88 * rp.weight;
-      if (a <= 0.004) continue;
+      if (a <= 0.004 || rp.r < 4) continue;
+      // and the crest itself, likewise with no dark companion
       var lw = (1.9 * rp.weight + 0.5) * (1 - k * 0.35);
-      crest(g, rp, rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
-      crest(g, rp, rp.r, a * 0.92, lw, C.wave);
+      crest(g, rp, rp.r, a * 0.95, lw, C.wave);
     }
 
     g.globalAlpha = 1;

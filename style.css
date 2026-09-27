@@ -29,7 +29,6 @@ html[data-theme="light"] {
   --pond-deep:  #5f8b81;   /* depth at the edges */
   --pond-light: rgba(238, 255, 247, 0.8);
   --wave:       rgba(255, 255, 255, 0.98);   /* ripple crest */
-  --wave-dark:  rgba(46, 88, 76, 0.5);       /* its trough */
   --silt:       #4a6b60;   /* mottling on the pond floor */
   --stone:      #6d8178;   /* pebbles on the bottom */
   --stone-lit:  #c6d2c6;
@@ -59,7 +58,6 @@ html[data-theme="dark"] {
   --pond-deep:  #05191b;   /* depth at the edges */
   --pond-light: rgba(130, 235, 212, 0.34);
   --wave:       rgba(205, 255, 243, 0.92);   /* ripple crest */
-  --wave-dark:  rgba(0, 16, 14, 0.72);       /* its trough */
   --silt:       #04100f;   /* mottling on the pond floor */
   --stone:      #40736a;   /* pebbles on the bottom */
   --stone-lit:  #6ba496;
