@@ -31,11 +31,13 @@ html[data-theme="light"] {
   --wave:       rgba(255, 255, 255, 0.98);   /* ripple crest */
   --silt:       #4a6b60;   /* mottling on the pond floor */
   --stone:      #6d8178;   /* pebbles on the bottom */
+  --stone-warm: #a08a66;   /* and the ochre ones */
   --stone-lit:  #c6d2c6;
   --weed:       #3a6b49;   /* submerged planting */
   --weed-tip:   #63a06d;
   --algae:      #4f7a53;   /* matted growth on the floor */
-  --detritus:   #6b6047;   /* sunken leaves and twigs */
+  --algae-2:    #86913f;   /* olive, where it is thinner */
+  --detritus:   #8d6a38;   /* sunken leaves and twigs */
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
@@ -60,11 +62,13 @@ html[data-theme="dark"] {
   --wave:       rgba(205, 255, 243, 0.92);   /* ripple crest */
   --silt:       #04100f;   /* mottling on the pond floor */
   --stone:      #40736a;   /* pebbles on the bottom */
+  --stone-warm: #6a5c42;   /* and the ochre ones */
   --stone-lit:  #6ba496;
   --weed:       #1f6b4b;   /* submerged planting */
   --weed-tip:   #44a877;
   --algae:      #235e3d;   /* matted growth on the floor */
-  --detritus:   #4a4335;   /* sunken leaves and twigs */
+  --algae-2:    #4a6b2c;   /* olive, where it is thinner */
+  --detritus:   #5c4a2c;   /* sunken leaves and twigs */
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;

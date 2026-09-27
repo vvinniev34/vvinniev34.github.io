@@ -99,6 +99,8 @@
     C.weed      = v("--weed", "#4c7a58");
     C.weedTip   = v("--weed-tip", "#6d9e72");
     C.algae     = v("--algae", "#4f7a53");
+    C.algae2    = v("--algae-2", "#86913f");
+    C.stoneWarm = v("--stone-warm", "#a08a66");
     C.detritus  = v("--detritus", "#6b6047");
   }
 
@@ -598,7 +600,8 @@
       g.beginPath();
       g.ellipse(0, 0, st.r, st.r * st.squash, 0, 0, Math.PI * 2);
       g.globalAlpha = 0.62 + st.tone * 0.24;
-      g.fillStyle = st.tone > 0.62 ? C.stoneLit : C.stone;
+      g.fillStyle = st.tone > 0.72 ? C.stoneLit
+                  : (st.warm ? C.stoneWarm : C.stone);
       g.fill();
       g.beginPath();
       g.ellipse(-st.r * 0.24, -st.r * 0.28, st.r * 0.5, st.r * st.squash * 0.38, 0, 0, Math.PI * 2);
@@ -616,8 +619,11 @@
     for (var al = 0; al < algaePts.length; al++) {
       var ax = algaePts[al].x, ay = algaePts[al].y;
       var ar = 50 + Math.random() * 190;
+      /* Two greens, mixed patch by patch. A single hue across the whole
+         floor is what made light mode read as monochrome; dark mode hid
+         it because everything separates on brightness there. */
       g.globalAlpha = 0.05 + Math.random() * 0.09;
-      g.fillStyle = C.algae;
+      g.fillStyle = Math.random() < 0.42 ? C.algae2 : C.algae;
       g.beginPath();
       for (var lobe = 0; lobe < 6; lobe++) {
         var la = (lobe / 6) * Math.PI * 2 + Math.random() * 0.5;
@@ -645,7 +651,8 @@
       var lean = Math.random() * Math.PI * 2;
       var fan = 0.7 + Math.random() * 1.9;          // not the full circle
       g.globalAlpha = 0.22 + Math.random() * 0.26;
-      g.strokeStyle = Math.random() > 0.45 ? C.weed : C.algae;
+      g.strokeStyle = Math.random() > 0.55 ? C.weed
+                    : (Math.random() > 0.5 ? C.algae : C.algae2);
       g.lineWidth = 0.8 + Math.random() * 1.5;
       g.beginPath();
       for (var bl2 = 0; bl2 < blades; bl2++) {
@@ -728,6 +735,7 @@
           squash: 0.55 + Math.random() * 0.4,
           rot: Math.random() * Math.PI,
           tone: Math.random(),
+          warm: Math.random() < 0.34,      // ochre rather than grey-green
         });
       }
     }
@@ -740,6 +748,7 @@
         squash: 0.55 + Math.random() * 0.4,
         rot: Math.random() * Math.PI,
         tone: Math.random(),
+        warm: Math.random() < 0.34,
       });
     }
 
