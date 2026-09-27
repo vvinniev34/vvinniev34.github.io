@@ -234,15 +234,6 @@
       head.y += _wf[1] * 3.4;
     }
 
-    /* Keep them in frame. This is summed with the flee vector rather than
-       replacing it — overriding would pin a fleeing fish against the wall and
-       it would just mill about next to the cursor. */
-    var m = 110;
-    if (head.x < m)          ax += (1 - head.x / m) * 2.6;
-    else if (head.x > W - m) ax -= (1 - (W - head.x) / m) * 2.6;
-    if (head.y < m)          ay += (1 - head.y / m) * 2.6;
-    else if (head.y > H - m) ay -= (1 - (H - head.y) / m) * 2.6;
-
     /* Food beats fear: a fed koi will come back towards the surface even
        with the cursor nearby. Pull scales with proximity so the nearest fish
        commit hardest and the others drift over. */
@@ -312,6 +303,17 @@
     head.x += Math.cos(swim) * f.speed * dt * 60;
     head.y += Math.sin(swim) * f.speed * dt * 60;
 
+    /* Wrap rather than turn back at the edge. The whole spine shifts
+       together — moving only the head would leave the body stretched right
+       across the screen — and only once the fish is completely out of
+       frame, so it slides off one side and back in on the other with
+       nothing popping into view. */
+    var span = (SEG - 1) * f.len + f.girth * 3;
+    if (head.x < -span)         shiftFish(f, W + 2 * span, 0);
+    else if (head.x > W + span) shiftFish(f, -(W + 2 * span), 0);
+    if (head.y < -span)         shiftFish(f, 0, H + 2 * span);
+    else if (head.y > H + span) shiftFish(f, 0, -(H + 2 * span));
+
     /* Each joint follows the one ahead at a fixed distance AND may only bend
        so far relative to the joint before it. Distance alone lets the chain
        fold straight back through itself, which is how the fish ended up tying
@@ -335,6 +337,10 @@
       b.x = a.x + Math.cos(ang) * f.len;
       b.y = a.y + Math.sin(ang) * f.len;
     }
+  }
+
+  function shiftFish(f, dx, dy) {
+    for (var i = 0; i < SEG; i++) { f.spine[i].x += dx; f.spine[i].y += dy; }
   }
 
   function bodyOutline(f) {
@@ -756,12 +762,12 @@
         b.trail.splice(0, 2);
       }
 
-      var m = 40;
-      if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) {
-        b.a = Math.atan2(H / 2 - b.y, W / 2 - b.x) + (Math.random() - 0.5) * 0.8;
-        b.x = Math.max(m, Math.min(W - m, b.x));
-        b.y = Math.max(m, Math.min(H - m, b.y));
-      }
+      // wrap, like everything else on the surface
+      var m = 24;
+      if (b.x < -m)         { b.x += W + 2 * m; b.trail.length = 0; }
+      else if (b.x > W + m) { b.x -= W + 2 * m; b.trail.length = 0; }
+      if (b.y < -m)         { b.y += H + 2 * m; b.trail.length = 0; }
+      else if (b.y > H + m) { b.y -= H + 2 * m; b.trail.length = 0; }
     }
   }
 
@@ -1724,6 +1730,7 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
+    size: function () { return { W: W, H: H }; },
     caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
   };
