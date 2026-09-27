@@ -902,7 +902,58 @@
      disturbed one was happening to a ring nobody could see. */
   var RIPPLE_LIFE = 2.8;
 
+  function dentRing(rp, ang, amount, spread) {
+    var slot = Math.floor(((ang + TAU) % TAU) / TAU * RN) % RN;
+    var lim = rp.r * 0.2;
+    for (var o = -spread; o <= spread; o++) {
+      var si = (slot + o + RN) % RN;
+      var fall = 1 - Math.abs(o) / (spread + 1);
+      var nd = rp.def[si] + amount * fall;
+      rp.def[si] = nd > lim ? lim : (nd < -lim ? -lim : nd);
+    }
+  }
+
+  /* Where two wavefronts cross, each buckles the other. Two expanding
+     circles intersect at theta +/- acos(...) from the line joining their
+     centres; that is where the interference goes. Previously ripples
+     passed through one another as though the other were not there. */
+  function crossRings(dt) {
+    for (var i = 0; i < ripples.length; i++) {
+      var A = ripples[i];
+      if (A.delay > 0 || A.r < 12) continue;
+      for (var j = i + 1; j < ripples.length; j++) {
+        var B = ripples[j];
+        if (B.delay > 0 || B.r < 12) continue;
+
+        var dx = B.x - A.x, dy = B.y - A.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 1 || d > A.r + B.r || d < Math.abs(A.r - B.r)) continue;
+
+        var th = Math.atan2(dy, dx);
+        var ka = Math.pow(1 - Math.min(1, A.life / RIPPLE_LIFE), 1.1);
+        var kb = Math.pow(1 - Math.min(1, B.life / RIPPLE_LIFE), 1.1);
+
+        var ca = (d * d + A.r * A.r - B.r * B.r) / (2 * d * A.r);
+        if (ca >= -1 && ca <= 1) {
+          var aa = Math.acos(ca);
+          var amtA = B.weight * kb * 26 * dt;
+          dentRing(A, th + aa, amtA, 2);
+          dentRing(A, th - aa, amtA, 2);
+        }
+
+        var cb = (d * d + B.r * B.r - A.r * A.r) / (2 * d * B.r);
+        if (cb >= -1 && cb <= 1) {
+          var ab = Math.acos(cb);
+          var amtB = A.weight * ka * 26 * dt;
+          dentRing(B, th + Math.PI + ab, amtB, 2);
+          dentRing(B, th + Math.PI - ab, amtB, 2);
+        }
+      }
+    }
+  }
+
   function disturbRings(dt) {
+    crossRings(dt);
     if (!ripples.length) return;
     var moving = Math.sqrt(mouse.dx * mouse.dx + mouse.dy * mouse.dy);
 
@@ -1092,7 +1143,13 @@
     var ws = Math.pow(1 - k, 1.1) * rp.weight;
     if (ws < 0.04) return;
 
-    var band = 26 + rp.r * 0.42;
+    /* Band scales with the ripple so it is always a ring. It used to be
+       26 + 0.42r, which at small radii was wider than the ripple itself —
+       the inner edge clamped to zero and the "ring" filled in as a soft
+       blob. That is why ambient ripples read as drifting smoke while the
+       cursor's fresh ones read as rings: same code, two different shapes
+       depending on size. */
+    var band = 4 + rp.r * 0.16;
     var inner = Math.max(0, rp.r - band), outer = rp.r + band;
 
     var gs = g.createRadialGradient(rp.x, rp.y, inner, rp.x, rp.y, outer);
