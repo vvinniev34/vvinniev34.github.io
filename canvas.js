@@ -212,7 +212,8 @@
 
     var fleeing = 0, panic = 0;
     if (mouse.on) {
-      var dx = head.x - mouse.x, dy = head.y - mouse.y;
+      toroidal(head.x - mouse.x, head.y - mouse.y, _td);
+      var dx = _td[0], dy = _td[1];
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       var reach = 460 + mouse.vel * 150;     // a fast cursor is noticed sooner
       if (d < reach) {
@@ -239,19 +240,19 @@
        commit hardest and the others drift over. */
     var feeding = 0;
     if (pellets.length) {
-      var best = null, bd = 1e9;
+      var best = null, bd = 1e9, bestDx = 0, bestDy = 0;
       for (var pi = 0; pi < pellets.length; pi++) {
         var pl = pellets[pi];
-        var pdx = pl.x - head.x, pdy = pl.y - head.y;
-        var pd2 = pdx * pdx + pdy * pdy;
-        if (pd2 < bd) { bd = pd2; best = pl; }
+        toroidal(pl.x - head.x, pl.y - head.y, _td);
+        var pd2 = _td[0] * _td[0] + _td[1] * _td[1];
+        if (pd2 < bd) { bd = pd2; best = pl; bestDx = _td[0]; bestDy = _td[1]; }
       }
       var pd = Math.sqrt(bd) || 1;
       if (best && pd < 430) {
         feeding = 1 - pd / 430;
         var pull = 3.4 * feeding;
-        ax += ((best.x - head.x) / pd) * pull;
-        ay += ((best.y - head.y) / pd) * pull;
+        ax += (bestDx / pd) * pull;
+        ay += (bestDy / pd) * pull;
         if (pd < f.girth * 1.4) {          // eaten
           best.gone = true;
           addRipple(best.x, best.y, 16 + Math.random() * 12, 0, 0.45, 0.3);
@@ -337,6 +338,19 @@
       b.x = a.x + Math.cos(ang) * f.len;
       b.y = a.y + Math.sin(ang) * f.len;
     }
+  }
+
+  /* Shortest vector between two points on a pond that wraps. Without this
+     a fish whose head has just crossed the right edge reads as a whole
+     screen away from a cursor at the left edge, even though its tail is
+     right there — so it would not flee from something visibly on top of
+     it. Everything that reasons about distance has to agree the pond is a
+     torus, not just the drawing. */
+  var _td = [0, 0];
+  function toroidal(dx, dy, out) {
+    if (dx > W * 0.5) dx -= W; else if (dx < -W * 0.5) dx += W;
+    if (dy > H * 0.5) dy -= H; else if (dy < -H * 0.5) dy += H;
+    out[0] = dx; out[1] = dy;
   }
 
   function shiftFish(f, dx, dy) {
@@ -740,7 +754,8 @@
       var b = bugs[i];
 
       // skitter away if the cursor comes near
-      var fx = mouse.x - b.x, fy = mouse.y - b.y;
+      toroidal(mouse.x - b.x, mouse.y - b.y, _td);
+      var fx = _td[0], fy = _td[1];
       var fd = Math.sqrt(fx * fx + fy * fy) || 1;
       b.panicCool -= dt;
       if (mouse.on && fd < 130) {
@@ -1221,7 +1236,8 @@
     // Everything nearby bolts, harder and from further out.
     fish.forEach(function (f) {
       var h = f.spine[0];
-      var dx = h.x - x, dy = h.y - y;
+      toroidal(h.x - x, h.y - y, _td);
+      var dx = _td[0], dy = _td[1];
       var d = Math.sqrt(dx * dx + dy * dy);
       if (d < 360) {
         // Point them away and frighten them; the steering and acceleration
