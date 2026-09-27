@@ -84,7 +84,8 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
-    C.bug       = v("--bug", "#3d4a42");
+    C.frog      = v("--frog", "#5f8f52");
+    C.frogDark  = v("--frog-dark", "#3c6236");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
@@ -203,7 +204,7 @@
     if (f.rise > 0) {
       f.rise -= dt;
       if (f.rise <= 0) f.rise = 0;
-    } else if (Math.random() < 0.013 * dt) {
+    } else if (Math.random() < 0.022 * dt) {
       f.rise = 1.1 + Math.random() * 0.9;
       addRipple(f.spine[0].x, f.spine[0].y,
                 26 + f.girth * 5, 0,
@@ -685,222 +686,163 @@
 
   var pads = [];
 
-  /* ---- water striders ------------------------------------------------
-     Small insects skating on the surface. They rest, then dart, and each
-     dart dimples the water — which is the other half of where the pond's
-     ambient ripples come from. Their feet leave the four little dimples
-     that make a strider recognisable from above.
+  /* ---- frogs -------------------------------------------------------------
+     A frog sits on a lily pad for a long while, then hops to another one.
+     Deliberately the opposite of the insects this replaces: almost always
+     still, and when it does move it is one slow readable arc rather than a
+     fast jitter. The landing is a proper ripple with an obvious cause.
+
+     While resting it rides its pad, so it rocks when a wave goes past.
      -------------------------------------------------------------------------- */
 
-  var bugs = [];
+  var frogs = [];
 
-  function makeBugs() {
-    var n = Math.max(4, Math.min(14, Math.round((W * H) / 150000)));
-    bugs = [];
+  function makeFrogs() {
+    frogs = [];
+    if (pads.length < 2) return;
+    var n = Math.max(1, Math.min(3, Math.floor(pads.length / 4)));
+    var used = {};
     for (var i = 0; i < n; i++) {
-      bugs.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
+      var pi = (Math.random() * pads.length) | 0;
+      if (used[pi]) { pi = (pi + 1) % pads.length; }
+      used[pi] = 1;
+      frogs.push({
+        pad: pi,
+        x: pads[pi].x, y: pads[pi].y,
         a: Math.random() * TAU,
-        v: 0,
-        wait: Math.random() * 9,
-        size: 0.8 + Math.random() * 0.5,
+        state: "rest",
+        wait: 3 + Math.random() * 9,
+        u: 0, dur: 0,
+        fx: 0, fy: 0, tx: 0, ty: 0,
+        size: 0.85 + Math.random() * 0.35,
       });
     }
   }
 
-  function updateBugs(dt) {
-    for (var i = 0; i < bugs.length; i++) {
-      var b = bugs[i];
+  function updateFrogs(dt) {
+    for (var i = 0; i < frogs.length; i++) {
+      var f = frogs[i];
 
-      // skitter away if the cursor comes near
-      var fx = mouse.x - b.x, fy = mouse.y - b.y;
-      var fd = Math.sqrt(fx * fx + fy * fy) || 1;
-      if (mouse.on && fd < 130) {
-        b.a = Math.atan2(-fy, -fx) + (Math.random() - 0.5) * 0.6;
-        if (b.v < 3.2) { b.v = 3.6; dimple(b); }
-        b.wait = 0.25;
-      }
+      if (f.state === "rest") {
+        var pad = pads[f.pad];
+        if (pad) {                       // ride the pad, rocking and all
+          f.x = pad.x + pad.ox + Math.sin(t * 0.11 + pad.phase) * 6;
+          f.y = pad.y + pad.oy + Math.sin(t * 0.5 + pad.phase) * 1.8;
+        }
 
-      b.v *= Math.max(0, 1 - dt * 7);        // a dart is short and sharp
-      b.wait -= dt;
-      if (b.wait <= 0) {
-        b.wait = 4 + Math.random() * 9;       // long rests, short darts
-        b.a += (Math.random() - 0.5) * 1.8;
-        b.v = 2.2 + Math.random() * 2.4;
-        dimple(b);
-      }
+        // startled off early if the cursor comes right up to it
+        var dx = f.x - mouse.x, dy = f.y - mouse.y;
+        if (mouse.on && dx * dx + dy * dy < 90 * 90 && f.wait > 0.4) f.wait = 0.4;
 
-      b.x += Math.cos(b.a) * b.v;
-      b.y += Math.sin(b.a) * b.v;
+        f.wait -= dt;
+        if (f.wait <= 0 && pads.length > 1) {
+          // pick a different pad, preferring a nearby one
+          var best = -1, bestScore = 1e9;
+          for (var p = 0; p < pads.length; p++) {
+            if (p === f.pad) continue;
+            var ddx = pads[p].x - f.x, ddy = pads[p].y - f.y;
+            var d = Math.sqrt(ddx * ddx + ddy * ddy) + Math.random() * 420;
+            if (d < bestScore) { bestScore = d; best = p; }
+          }
+          if (best >= 0) {
+            f.state = "hop";
+            f.u = 0;
+            f.fx = f.x; f.fy = f.y;
+            f.tx = pads[best].x; f.ty = pads[best].y;
+            f.dur = 0.5 + Math.hypot(f.tx - f.fx, f.ty - f.fy) / 700;
+            f.a = Math.atan2(f.ty - f.fy, f.tx - f.fx);
+            f.pad = best;
+            addRipple(f.fx, f.fy, 34 + Math.random() * 18, 0, 0.3, 0.45);
+          }
+        }
 
-      var m = 40;
-      if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) {
-        b.a = Math.atan2(H / 2 - b.y, W / 2 - b.x) + (Math.random() - 0.5) * 0.8;
-        b.x = Math.max(m, Math.min(W - m, b.x));
-        b.y = Math.max(m, Math.min(H - m, b.y));
+      } else {
+        f.u += dt / f.dur;
+        if (f.u >= 1) {
+          f.u = 1;
+          f.state = "rest";
+          f.wait = 4 + Math.random() * 10;
+          addRipple(f.tx, f.ty, 48 + Math.random() * 26, 0, 0.42, 0.6);
+          for (var d2 = 0; d2 < 5; d2++) {
+            var ang = Math.random() * TAU, sp = 1.2 + Math.random() * 2.2;
+            drops.push({ x: f.tx, y: f.ty, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                         r: 1 + Math.random() * 1.6, life: 0.3 + Math.random() * 0.3, age: 0 });
+          }
+        }
+        f.x = f.fx + (f.tx - f.fx) * f.u;
+        f.y = f.fy + (f.ty - f.fy) * f.u;
       }
     }
   }
 
-  function dimple(b) {
-    addRipple(b.x, b.y, 14 + Math.random() * 20, 0,
-              0.1 + Math.random() * 0.1, 0.12);
-  }
+  function drawFrogs() {
+    for (var i = 0; i < frogs.length; i++) {
+      var f = frogs[i];
+      var lift = f.state === "hop" ? Math.sin(Math.PI * f.u) : 0;
+      var s = f.size * (1 + lift * 0.3);
 
-  function drawBugs() {
-    for (var i = 0; i < bugs.length; i++) {
-      var b = bugs[i];
-      var s = b.size;
-      ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.rotate(b.a);
-
-      // the four footprints pressing into the surface film
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = C.light;
-      for (var q = 0; q < 4; q++) {
-        var lx = (q < 2 ? 4.5 : -3.5) * s;
-        var ly = (q % 2 ? 5.5 : -5.5) * s;
+      // its shadow stays on the water and separates as it rises
+      if (lift > 0.02) {
+        ctx.globalAlpha = 0.2 * (1 - lift * 0.4);
+        ctx.fillStyle = "#03120d";
         ctx.beginPath();
-        ctx.ellipse(lx, ly, 2.1 * s, 1.7 * s, 0, 0, TAU);
+        ctx.ellipse(f.x + lift * 9, f.y + lift * 13, 7 * f.size, 5 * f.size, 0, 0, TAU);
         ctx.fill();
       }
 
-      // legs
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = C.bug;
-      ctx.lineWidth = 0.7 * s;
-      for (var l = 0; l < 4; l++) {
-        var ex = (l < 2 ? 4.5 : -3.5) * s;
-        var ey = (l % 2 ? 5.5 : -5.5) * s;
+      ctx.save();
+      ctx.translate(f.x - lift * 5, f.y - lift * 8);
+      ctx.rotate(f.a);
+
+      // hind legs, tucked when resting and extended mid-hop
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = C.frogDark;
+      for (var q = -1; q <= 1; q += 2) {
+        ctx.save();
+        ctx.translate(-2.5 * s, q * 3.4 * s);
+        ctx.rotate(q * (0.7 - lift * 0.5));
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(ex, ey);
-        ctx.stroke();
+        ctx.ellipse(0, 0, 4.6 * s, 1.9 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // front legs
+      for (var w = -1; w <= 1; w += 2) {
+        ctx.beginPath();
+        ctx.ellipse(3.4 * s, w * 2.8 * s, 2.6 * s, 1.1 * s, w * 0.4, 0, TAU);
+        ctx.fill();
       }
 
       // body
-      ctx.globalAlpha = 0.85;
-      ctx.fillStyle = C.bug;
+      ctx.globalAlpha = 0.96;
+      ctx.fillStyle = C.frog;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 3.1 * s, 1.1 * s, 0, 0, TAU);
+      ctx.ellipse(0, 0, 6.2 * s, 4.2 * s, 0, 0, TAU);
       ctx.fill();
 
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
-  }
+      // a couple of darker blotches
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = C.frogDark;
+      ctx.beginPath();
+      ctx.ellipse(-1.4 * s, -1.2 * s, 1.8 * s, 1.2 * s, 0.4, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(-0.6 * s, 1.6 * s, 1.4 * s, 0.9 * s, -0.3, 0, TAU);
+      ctx.fill();
 
-  /* ---- whirligig beetles ----------------------------------------------
-     The other thing you find on a pond surface, and a deliberate contrast
-     to the striders: where a strider rests and then darts in a straight
-     line, a whirligig never stops, spinning in tight erratic loops. They
-     gather in loose clusters, so each keeps a home point it circles near.
-     Shiny black from above, with a bright specular dot.
-     -------------------------------------------------------------------------- */
-
-  var beetles = [];
-
-  function makeBeetles() {
-    var groups = Math.max(2, Math.min(5, Math.round((W * H) / 400000)));
-    beetles = [];
-    for (var gi = 0; gi < groups; gi++) {
-      var hx = 90 + Math.random() * (W - 180);
-      var hy = 90 + Math.random() * (H - 180);
-      var n = 3 + (Math.random() * 4 | 0);
-      for (var i = 0; i < n; i++) {
-        beetles.push({
-          hx: hx, hy: hy,
-          x: hx + (Math.random() - 0.5) * 90,
-          y: hy + (Math.random() - 0.5) * 90,
-          a: Math.random() * TAU,
-          v: 1.1 + Math.random() * 1.1,
-          turn: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4),
-          flip: 0.2 + Math.random() * 0.4,
-          emit: Math.random() * 4,
-          size: 0.85 + Math.random() * 0.45,
-        });
-      }
-    }
-  }
-
-  function updateBeetles(dt) {
-    for (var i = 0; i < beetles.length; i++) {
-      var b = beetles[i];
-
-      // the constant, jittery turning that makes a whirligig a whirligig
-      b.flip -= dt;
-      if (b.flip <= 0) {
-        b.flip = 0.12 + Math.random() * 0.45;
-        b.turn = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 5);
-      }
-      b.a += b.turn * dt;
-
-      // stay near the group
-      var hx = b.hx - b.x, hy = b.hy - b.y;
-      var hd = Math.sqrt(hx * hx + hy * hy);
-      if (hd > 75) {
-        var want = Math.atan2(hy, hx);
-        b.a += Math.atan2(Math.sin(want - b.a), Math.cos(want - b.a)) * 1.6 * dt;
-      }
-
-      // scatter from the cursor
-      var fx = b.x - mouse.x, fy = b.y - mouse.y;
-      var fd = Math.sqrt(fx * fx + fy * fy) || 1;
-      if (mouse.on && fd < 120) {
-        var away = Math.atan2(fy, fx);
-        b.a += Math.atan2(Math.sin(away - b.a), Math.cos(away - b.a)) * 5 * dt;
-        b.v += (3.4 - b.v) * 3 * dt;
-      } else {
-        b.v += ((1.1 + b.size) - b.v) * 1.4 * dt;
-      }
-
-      b.x += Math.cos(b.a) * b.v;
-      b.y += Math.sin(b.a) * b.v;
-
-      // they are always moving, so they only occasionally leave a ring —
-      // their visible wake does the rest of the work
-      b.emit -= dt;
-      if (b.emit <= 0) {
-        b.emit = 12 + Math.random() * 10;
-        addRipple(b.x, b.y, 12 + Math.random() * 14, 0,
-                  0.09 + Math.random() * 0.08, 0.1);
-      }
-    }
-  }
-
-  function drawBeetles() {
-    for (var i = 0; i < beetles.length; i++) {
-      var b = beetles[i];
-      var s = b.size;
-      ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.rotate(b.a);
-
-      // the little V of disturbed water it drags behind
-      ctx.globalAlpha = 0.22;
-      ctx.strokeStyle = C.light;
-      ctx.lineWidth = 0.9;
-      for (var q = -1; q <= 1; q += 2) {
+      // eyes on top of the head, which is what reads as "frog" from above
+      ctx.globalAlpha = 0.95;
+      for (var e = -1; e <= 1; e += 2) {
+        ctx.fillStyle = C.frog;
         ctx.beginPath();
-        ctx.moveTo(-2 * s, 0);
-        ctx.quadraticCurveTo(-8 * s, q * 2 * s, -15 * s, q * 6 * s);
-        ctx.stroke();
+        ctx.ellipse(4.4 * s, e * 2.2 * s, 1.9 * s, 1.7 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#12140f";
+        ctx.beginPath();
+        ctx.arc(4.9 * s, e * 2.3 * s, 0.85 * s, 0, TAU);
+        ctx.fill();
       }
-
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = C.bug;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 3.4 * s, 2.3 * s, 0, 0, TAU);
-      ctx.fill();
-
-      // shiny carapace
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = C.light;
-      ctx.beginPath();
-      ctx.ellipse(0.7 * s, -0.7 * s, 1.2 * s, 0.7 * s, 0, 0, TAU);
-      ctx.fill();
 
       ctx.restore();
     }
@@ -1582,9 +1524,8 @@
     mouse.vel *= Math.max(0, 1 - dt * 2.4);
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
-    updateBugs(dt);
-    updateBeetles(dt);
     updateDuckweed(dt);
+    updateFrogs(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
        distance travelled rather than per frame, so the trail is even at any
@@ -1641,7 +1582,7 @@
        which you can watch happen. */
     nextAmbient -= dt;
     if (nextAmbient <= 0 && weeds.length && ripples.length < 40) {
-      nextAmbient = 1.8 + Math.random() * 4.5;
+      nextAmbient = 1.1 + Math.random() * 3;
       var wd = weeds[(Math.random() * weeds.length) | 0];
       addRipple(wd.x + (Math.random() - 0.5) * 40,
                 wd.y + (Math.random() - 0.5) * 40,
@@ -1693,9 +1634,8 @@
     ctx.globalAlpha = 1;
 
     drawDuckweed();      // floating leaves, carried by the waves
-    drawBugs();          // on the surface film, above the fish
-    drawBeetles();
     drawPads();          // floating on the surface, so over the fish
+    drawFrogs();         // sitting on top of them
   }
 
   var last = 0;
@@ -1738,8 +1678,7 @@
     initBackdrop();
     makePads();
     padBuoyancy();
-    makeBugs();
-    makeBeetles();
+    makeFrogs();
     makeDuckweed();
     stock();
   }
@@ -1790,6 +1729,7 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
+    frogs: function () { return frogs; },
     caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
   };

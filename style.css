@@ -38,7 +38,8 @@ html[data-theme="light"] {
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
-  --bug:        #3d4a42;   /* water striders */
+  --frog:       #5f8f52;   /* frogs on the lily pads */
+  --frog-dark:  #3c6236;
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
 }
@@ -66,7 +67,8 @@ html[data-theme="dark"] {
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
-  --bug:        #0c1a16;   /* water striders */
+  --frog:       #2e5c3c;   /* frogs on the lily pads */
+  --frog-dark:  #17351f;
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;
 }
