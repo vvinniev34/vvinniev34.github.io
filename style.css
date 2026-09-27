@@ -38,6 +38,7 @@ html[data-theme="light"] {
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
+  --bug:        #3d4a42;   /* water striders */
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
 }
@@ -65,6 +66,7 @@ html[data-theme="dark"] {
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
+  --bug:        #0c1a16;   /* water striders */
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;
 }

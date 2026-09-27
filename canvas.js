@@ -84,6 +84,7 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
+    C.bug       = v("--bug", "#3d4a42");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
@@ -146,6 +147,7 @@
          higher top speed but accelerate and turn more sluggishly. */
       maxSpeed: 2.3 * (0.85 + scale * 0.3) * (0.7 + temper * 0.45),
       startle: 0,
+      rise: 0,          // counts down while the fish is at the surface
       /* Each fish also breathes its own slow rhythm of effort, and now and
          then takes off for no reason, the way real fish do. */
       temper: temper,
@@ -194,6 +196,19 @@
          panic  — stays linear, so the flat-out sprint is reserved for a
                   cursor that's genuinely close. */
     f.startle *= Math.max(0, 1 - dt * 1.25);
+
+    /* Every so often a koi comes up for air. It rises, breaks the surface —
+       which is where a good share of the pond's ripples come from — and
+       settles back down. Ripples having a visible cause is the point. */
+    if (f.rise > 0) {
+      f.rise -= dt;
+      if (f.rise <= 0) f.rise = 0;
+    } else if (Math.random() < 0.02 * dt) {
+      f.rise = 1.1 + Math.random() * 0.9;
+      addRipple(f.spine[0].x, f.spine[0].y,
+                26 + f.girth * 5, 0,
+                0.16 + f.scale * 0.12, 0.3);
+    }
 
     var fleeing = 0, panic = 0;
     if (mouse.on) {
@@ -391,7 +406,8 @@
 
   function drawFish(f) {
     // Shadow on the pond floor, offset by how deep the fish is swimming.
-    var off = f.girth * (0.3 + f.depth * 0.45);
+    var surf = f.rise > 0 ? Math.min(1, f.rise * 1.6) : 0;
+    var off = f.girth * (0.3 + f.depth * 0.45) * (1 - surf * 0.55);
     ctx.save();
     ctx.translate(off, off * 1.15);
     fishPath(f);
@@ -400,7 +416,7 @@
     ctx.fill();
     ctx.restore();
 
-    var fade = 0.78 + f.depth * 0.22;
+    var fade = Math.min(1, 0.78 + f.depth * 0.22 + surf * 0.15);
 
     drawTail(f, f.pal.body, 0.55 * fade);
     drawFins(f, f.pal.body, 0.48 * fade);
@@ -668,6 +684,113 @@
      -------------------------------------------------------------------------- */
 
   var pads = [];
+
+  /* ---- water striders ------------------------------------------------
+     Small insects skating on the surface. They rest, then dart, and each
+     dart dimples the water — which is the other half of where the pond's
+     ambient ripples come from. Their feet leave the four little dimples
+     that make a strider recognisable from above.
+     -------------------------------------------------------------------------- */
+
+  var bugs = [];
+
+  function makeBugs() {
+    var n = Math.max(2, Math.min(6, Math.round((W * H) / 340000)));
+    bugs = [];
+    for (var i = 0; i < n; i++) {
+      bugs.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        a: Math.random() * TAU,
+        v: 0,
+        wait: Math.random() * 4,
+        size: 0.8 + Math.random() * 0.5,
+      });
+    }
+  }
+
+  function updateBugs(dt) {
+    for (var i = 0; i < bugs.length; i++) {
+      var b = bugs[i];
+
+      // skitter away if the cursor comes near
+      var fx = mouse.x - b.x, fy = mouse.y - b.y;
+      var fd = Math.sqrt(fx * fx + fy * fy) || 1;
+      if (mouse.on && fd < 130) {
+        b.a = Math.atan2(-fy, -fx) + (Math.random() - 0.5) * 0.6;
+        if (b.v < 3.2) { b.v = 3.6; dimple(b); }
+        b.wait = 0.25;
+      }
+
+      b.v *= Math.max(0, 1 - dt * 7);        // a dart is short and sharp
+      b.wait -= dt;
+      if (b.wait <= 0) {
+        b.wait = 1.6 + Math.random() * 4.2;   // long rests, short darts
+        b.a += (Math.random() - 0.5) * 1.8;
+        b.v = 2.2 + Math.random() * 2.4;
+        dimple(b);
+      }
+
+      b.x += Math.cos(b.a) * b.v;
+      b.y += Math.sin(b.a) * b.v;
+
+      var m = 40;
+      if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) {
+        b.a = Math.atan2(H / 2 - b.y, W / 2 - b.x) + (Math.random() - 0.5) * 0.8;
+        b.x = Math.max(m, Math.min(W - m, b.x));
+        b.y = Math.max(m, Math.min(H - m, b.y));
+      }
+    }
+  }
+
+  function dimple(b) {
+    addRipple(b.x, b.y, 14 + Math.random() * 20, 0,
+              0.1 + Math.random() * 0.1, 0.12);
+  }
+
+  function drawBugs() {
+    for (var i = 0; i < bugs.length; i++) {
+      var b = bugs[i];
+      var s = b.size;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.a);
+
+      // the four footprints pressing into the surface film
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = C.light;
+      for (var q = 0; q < 4; q++) {
+        var lx = (q < 2 ? 4.5 : -3.5) * s;
+        var ly = (q % 2 ? 5.5 : -5.5) * s;
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 2.1 * s, 1.7 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      // legs
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = C.bug;
+      ctx.lineWidth = 0.7 * s;
+      for (var l = 0; l < 4; l++) {
+        var ex = (l < 2 ? 4.5 : -3.5) * s;
+        var ey = (l % 2 ? 5.5 : -5.5) * s;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+
+      // body
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = C.bug;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3.1 * s, 1.1 * s, 0, 0, TAU);
+      ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   function makePads() {
     var n = Math.max(4, Math.min(12, Math.round((W * H) / 165000)));
@@ -1285,6 +1408,7 @@
     mouse.vel *= Math.max(0, 1 - dt * 2.4);
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
+    updateBugs(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
        distance travelled rather than per frame, so the trail is even at any
@@ -1335,15 +1459,18 @@
        at a spread of sizes — mostly small, occasionally broad. Every one is
        an ordinary ripple: it dents, tears, interferes with its neighbours
        and answers to the cursor exactly like the ones you make yourself. */
+    /* No more ripples from nowhere. What is left is the occasional bubble
+       working its way up out of the planting — everything else on the
+       surface now comes from a koi surfacing or a strider darting, both of
+       which you can watch happen. */
     nextAmbient -= dt;
-    if (nextAmbient <= 0 && ripples.length < 40) {
-      nextAmbient = 0.2 + Math.random() * 0.55;
-      var big = Math.random() < 0.18;
-      addRipple(Math.random() * W, Math.random() * H,
-                big ? 130 + Math.random() * 90 : 30 + Math.random() * 70,
-                0,
-                (big ? 0.3 : 0.18) + Math.random() * 0.22,
-                big ? 0.45 : 0.25);
+    if (nextAmbient <= 0 && weeds.length && ripples.length < 40) {
+      nextAmbient = 1.8 + Math.random() * 4.5;
+      var wd = weeds[(Math.random() * weeds.length) | 0];
+      addRipple(wd.x + (Math.random() - 0.5) * 40,
+                wd.y + (Math.random() - 0.5) * 40,
+                16 + Math.random() * 18, 0,
+                0.12 + Math.random() * 0.1, 0.2);
     }
   }
 
@@ -1389,6 +1516,7 @@
 
     ctx.globalAlpha = 1;
 
+    drawBugs();          // on the surface film, above the fish
     drawPads();          // floating on the surface, so over the fish
   }
 
@@ -1432,6 +1560,7 @@
     initBackdrop();
     makePads();
     padBuoyancy();
+    makeBugs();
     stock();
   }
 
