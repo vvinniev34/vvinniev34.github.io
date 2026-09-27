@@ -63,8 +63,8 @@ html[data-theme="dark"] {
   --stone-lit:  #6ba496;
   --weed:       #1f6b4b;   /* submerged planting */
   --weed-tip:   #44a877;
-  --algae:      #17452f;   /* matted growth on the floor */
-  --detritus:   #2a2a20;   /* sunken leaves and twigs */
+  --algae:      #235e3d;   /* matted growth on the floor */
+  --detritus:   #4a4335;   /* sunken leaves and twigs */
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;

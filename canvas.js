@@ -581,7 +581,7 @@
        covers almost everything — and ours was bare silt with stones on it.
        Irregular overlapping blobs rather than neat circles, because
        nothing on a pond bottom has an outline. */
-    for (var al = 0; al < 26; al++) {
+    for (var al = 0; al < 44; al++) {
       var ax = Math.random() * W, ay = Math.random() * H;
       var ar = 50 + Math.random() * 190;
       g.globalAlpha = 0.05 + Math.random() * 0.09;
@@ -601,21 +601,27 @@
 
     /* Submerged rosettes: static low growth, distinct from the blades that
        sway. Most pond planting doesn't move much. */
-    for (var rz = 0; rz < 22; rz++) {
+    /* Low growth. These used to radiate evenly in all directions at a
+       uniform length, which reads as an asterisk rather than a plant.
+       Now each clump leans one way, the blades fan within an arc rather
+       than a full circle, and their lengths vary a lot. */
+    for (var rz = 0; rz < 46; rz++) {
       var rx = Math.random() * W, ry = Math.random() * H;
-      var blades = 7 + (Math.random() * 7 | 0);
-      var reach = 14 + Math.random() * 30;
-      g.globalAlpha = 0.3 + Math.random() * 0.22;
-      g.strokeStyle = Math.random() > 0.5 ? C.weed : C.algae;
-      g.lineWidth = 1 + Math.random() * 1.4;
+      var blades = 5 + (Math.random() * 8 | 0);
+      var reach = 12 + Math.random() * 38;
+      var lean = Math.random() * Math.PI * 2;
+      var fan = 0.7 + Math.random() * 1.9;          // not the full circle
+      g.globalAlpha = 0.22 + Math.random() * 0.26;
+      g.strokeStyle = Math.random() > 0.45 ? C.weed : C.algae;
+      g.lineWidth = 0.8 + Math.random() * 1.5;
       g.beginPath();
       for (var bl2 = 0; bl2 < blades; bl2++) {
-        var ba = Math.random() * Math.PI * 2;
-        var blen = reach * (0.5 + Math.random() * 0.7);
-        var bend = (Math.random() - 0.5) * 0.6;
+        var ba = lean + (Math.random() - 0.5) * fan;
+        var blen = reach * (0.3 + Math.random() * Math.random() * 1.2);
+        var bend = (Math.random() - 0.5) * 1.1;     // real curve, not a spoke
         g.moveTo(rx, ry);
-        g.quadraticCurveTo(rx + Math.cos(ba + bend) * blen * 0.6,
-                           ry + Math.sin(ba + bend) * blen * 0.6,
+        g.quadraticCurveTo(rx + Math.cos(ba + bend) * blen * 0.55,
+                           ry + Math.sin(ba + bend) * blen * 0.55,
                            rx + Math.cos(ba) * blen,
                            ry + Math.sin(ba) * blen);
       }
@@ -626,7 +632,7 @@
     g.globalAlpha = 0.3;
     g.fillStyle = C.detritus;
     g.beginPath();
-    for (var lf = 0; lf < 34; lf++) {
+    for (var lf = 0; lf < 70; lf++) {
       var fx2 = Math.random() * W, fy2 = Math.random() * H;
       var fr2 = 3 + Math.random() * 7;
       g.moveTo(fx2 + fr2, fy2);
@@ -639,7 +645,7 @@
     g.strokeStyle = C.detritus;
     g.lineWidth = 1.5;
     g.beginPath();
-    for (var tw = 0; tw < 7; tw++) {
+    for (var tw = 0; tw < 14; tw++) {
       var tx = Math.random() * W, ty = Math.random() * H;
       var ta = Math.random() * Math.PI * 2, tl = 24 + Math.random() * 60;
       g.moveTo(tx, ty);
@@ -668,13 +674,33 @@
 
   function makeBottom() {
     stones = [];
-    var n = Math.round((W * H) / 26000);
-    for (var i = 0; i < n; i++) {
-      var r = 3 + Math.random() * Math.random() * 22;       // mostly gravel
+    /* Stones gather into beds on a real pond floor; scattered uniformly
+       they read as noise. Each bed drops a cluster, plus a thin scatter
+       everywhere else. */
+    var beds = Math.round((W * H) / 190000);
+    for (var b = 0; b < beds; b++) {
+      var bx = Math.random() * W, by = Math.random() * H;
+      var spread = 60 + Math.random() * 130;
+      var count = 10 + (Math.random() * 22 | 0);
+      for (var c = 0; c < count; c++) {
+        var ba = Math.random() * Math.PI * 2;
+        var bd = Math.pow(Math.random(), 0.7) * spread;
+        stones.push({
+          x: bx + Math.cos(ba) * bd,
+          y: by + Math.sin(ba) * bd,
+          r: 3 + Math.random() * Math.random() * 20,
+          squash: 0.55 + Math.random() * 0.4,
+          rot: Math.random() * Math.PI,
+          tone: Math.random(),
+        });
+      }
+    }
+    var loose = Math.round((W * H) / 24000);
+    for (var i = 0; i < loose; i++) {
       stones.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        r: r,
+        r: 2 + Math.random() * Math.random() * 14,
         squash: 0.55 + Math.random() * 0.4,
         rot: Math.random() * Math.PI,
         tone: Math.random(),
