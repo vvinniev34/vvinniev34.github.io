@@ -109,11 +109,9 @@
       kids.push(el("p", {
         class: "masthead__role",
         html: bits.map(function (b) { return inline(b); })
-                  .join('<span class="sep">/</span>'),
+                  .join('<span class="sep">·</span>'),
       }));
     }
-
-    kids.push(el("div", { class: "masthead__rule", "aria-hidden": "true" }));
 
     if (R.intro && R.intro.length) {
       kids.push(el("div", { class: "intro" }, R.intro.map(function (p) {

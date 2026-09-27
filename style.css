@@ -145,15 +145,18 @@ body::after {
   max-height: calc(100dvh - clamp(3rem, 8vh, 6rem));
 }
 
-.card__intro {
-  display: block;
-  padding: clamp(1.5rem, 3vw, 2.25rem);
+.card__intro { display: block; padding: clamp(1.5rem, 3vw, 2.25rem); }
+
+/* The card scrolls as one piece when it needs to. Only the terminal keeps
+   a scroller of its own — two independent scrollbars inside one card is
+   confusing, and three would be absurd. */
+.card__body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--rule) 70%, transparent) transparent;
 }
-.card__intro::-webkit-scrollbar { width: 7px; }
-.card__intro::-webkit-scrollbar-thumb {
+.card__body::-webkit-scrollbar { width: 7px; }
+.card__body::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--rule) 70%, transparent);
   border-radius: 4px;
 }
@@ -222,10 +225,13 @@ body::after {
 }
 .card.is-min .card__tab { display: block; }
 
+/* The card's three blocks are divided identically, so it reads as: who
+   you are / how to look around / where to go next. */
 .card__term {
   display: flex;
   min-height: 0;
-  padding: 0 clamp(1.5rem, 3vw, 2.25rem);
+  padding: clamp(1.1rem, 2.2vw, 1.5rem) clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid color-mix(in srgb, var(--rule) 55%, transparent);
 }
 
 /* Inside the card the terminal is an inset panel, not a second sheet of
@@ -240,7 +246,6 @@ body::after {
 }
 
 .card__links {
-  margin-top: clamp(1.1rem, 2.4vw, 1.6rem);
   padding: .85rem clamp(1.5rem, 3vw, 2.25rem);
   border-top: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
   background: var(--wash);
@@ -271,8 +276,8 @@ body::after {
 
 /* Short screens: tighten the rhythm so it still fits without scrolling. */
 @media (max-height: 800px) {
-  .masthead__role { margin-top: .9rem; }
-  .masthead__rule { margin: 1.2rem 0; }
+  .masthead__role { margin-top: .7rem; }
+  .intro { margin-top: 1.5rem; }
   .intro { font-size: .95rem; }
   .intro p { margin-bottom: .75rem; }
   .now { margin-top: 1rem; }
@@ -350,7 +355,7 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 .masthead__name .ln2 { display: block; padding-left: .12em; }
 
 .masthead__role {
-  margin: 1.5rem 0 0;
+  margin: .85rem 0 0;
   font-family: var(--mono);
   font-size: .78rem;
   letter-spacing: .12em;
@@ -359,15 +364,10 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
 }
 .masthead__role .sep { display: inline-block; margin: 0 .6rem; color: var(--rule); }
 
-.masthead__rule {
-  height: 1px;
-  background: var(--rule);
-  margin: 2.5rem 0;
-  transform: scaleX(0);
-  transform-origin: left;
-  animation: draw 1.1s var(--ease) .15s forwards;
-}
-@keyframes draw { to { transform: scaleX(1); } }
+/* Name and role read as one unit, with the intro a separate block below.
+   Spacing does that job, so the floating rule that used to divide them is
+   gone — it was furniture, not structure. */
+.intro { margin-top: 2.1rem; }
 
 .intro { max-width: 34rem; color: var(--fg); font-size: 1.02rem; }
 .intro p { margin: 0 0 1.05rem; }
@@ -380,7 +380,7 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   display: flex;
   align-items: baseline;
   gap: .6rem;
-  margin-top: 2rem;
+  margin-top: 1.4rem;
   font-family: var(--mono);
   font-size: .78rem;
   color: var(--muted);
@@ -795,7 +795,7 @@ code {
     transition-duration: .001ms !important;
   }
   .card__intro > .masthead > * { animation: none; }
-  .masthead__rule, .section__head::after { transform: scaleX(1); }
+  .section__head::after { transform: scaleX(1); }
 }
 
 /* ---- print: the page becomes a clean one-page résumé ---------------------- */
@@ -833,7 +833,6 @@ code {
   .masthead__name { font-size: 22pt; line-height: 1; }
   .masthead__name .ln2 { display: inline; padding-left: .25em; }
   .masthead__role { margin-top: .5rem; }
-  .masthead__rule { margin: .7rem 0; }
   .intro { margin-top: .7rem; max-width: none; }
   .now { margin-top: .5rem; }
   .linkrow { margin-top: .6rem; gap: .2rem 1rem; }
@@ -843,7 +842,7 @@ code {
   .index__title { font-size: 12pt; }
 
   .stagger > * { opacity: 1 !important; transform: none !important; }
-  .masthead__rule, .section__head::after { transform: scaleX(1) !important; animation: none !important; }
+  .section__head::after { transform: scaleX(1) !important; animation: none !important; }
   .entry, .index li, .grid__row { break-inside: avoid; }
   .section { break-inside: avoid-page; }
 
