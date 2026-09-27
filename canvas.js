@@ -22,10 +22,17 @@
   /* Three stacked canvases, so nothing is composited that hasn't changed.
 
        bg     the pond floor. Painted once at resize, never touched again.
-       light  the surface: caustics, sheen, the swell and crest of every
-              ripple. Half resolution, stretched by CSS — the GPU does the
-              upscale for free.
-       fg     everything with a hard edge: weeds, koi, spray, pads.
+       light  the water surface, and everything that IS the surface: the
+              caustic texture, and every wavefront — its swell, its crest,
+              and the spray an impact throws up. Rendered below full
+              resolution and stretched by the compositor, because all of it
+              is soft and low-frequency.
+       fg     things floating in or on the water rather than being it:
+              weeds, koi, droplets, food, lily pads.
+
+     The rule is what something IS, not when it was written. Ripples used
+     to be split across both layers in four separate passes, which is why
+     they never looked like one thing.
 
      Previously all of this was one canvas doing seven full-canvas fills a
      frame; the two remaining blits are gone entirely now. */
@@ -43,7 +50,10 @@
   var lightCtx = lightCv.getContext("2d");
   if (!ctx || !bgCtx || !lightCtx) return;
 
-  var LIGHT_SCALE = 0.5;
+  /* Removing the sheen bands and a caustic pass freed enough budget to
+     render the surface closer to full resolution, which matters now that
+     the ripple crests live on this layer. */
+  var LIGHT_SCALE = 0.7;
   var cv = fgCv;                      // pointer position is read off this one
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -698,44 +708,8 @@
       g.drawImage(cCv, 0, 0, W, H);
     }
 
-    /* Surface swell: each ring pushes a broad band of light through the
-       water. This is what makes the pond's shifting colour respond to a
-       ripple rather than slide past it. */
-    var swells = 0;
-    for (var wi = 0; wi < ripples.length && swells < 8; wi++) {
-      var rw = ripples[wi];
-      if (rw.delay > 0 || rw.r < 6) continue;
-      var wk = Math.min(1, rw.life / RIPPLE_LIFE);
-      var ws = Math.pow(1 - wk, 1.1) * rw.weight;
-      if (ws < 0.05) continue;
-      swells++;
+    drawWavefronts(g);
 
-      var cx = rw.x, cy = rw.y, rr = rw.r;
-      var band = 26 + rw.r * 0.42;
-      var inner = Math.max(0, rr - band), outer = rr + band;
-
-      var gs = g.createRadialGradient(cx, cy, inner, cx, cy, outer);
-      gs.addColorStop(0, "transparent");
-      gs.addColorStop(0.45, C.light);
-      gs.addColorStop(1, "transparent");
-      g.globalAlpha = 0.38 * ws;
-      g.fillStyle = gs;
-      g.fillRect(cx - outer, cy - outer, outer * 2, outer * 2);
-
-      var ti = Math.max(0, rr - band * 1.9), to = Math.max(1, rr - band * 0.15);
-      var gd = g.createRadialGradient(cx, cy, ti, cx, cy, to);
-      gd.addColorStop(0, "transparent");
-      gd.addColorStop(0.6, C.deep);
-      gd.addColorStop(1, "transparent");
-      g.globalAlpha = 0.28 * ws;
-      g.fillStyle = gd;
-      g.fillRect(cx - to, cy - to, to * 2, to * 2);
-    }
-
-    // Ripple crests belong here too: the caustic web IS the surface, so a
-    // wavefront is a feature of the same layer rather than a line floating
-    // over it. Everything that disturbs the surface now disturbs one thing.
-    drawRings(g);
 
     g.globalAlpha = 1;
   }
@@ -1054,10 +1028,52 @@
     }
   }
 
-  /* Wavefronts, drawn into the surface-light layer. */
-  function drawRings(g) {
+  /* ---- wavefronts --------------------------------------------------------
+     One ripple, drawn once, as one thing. It used to be four passes in two
+     places: a swell gradient and a trough gradient in the light layer, and
+     a crest stroke and a shadow stroke somewhere else entirely. They are
+     all the same physical feature — a band of lifted water — so they are
+     one routine now.
+
+     The soft band carries the mass of the wave and the stroke draws its
+     edge, which is also where the per-angle dents and tears show up.
+     -------------------------------------------------------------------------- */
+
+  function drawWavefronts(g) {
     g.lineCap = "round";
+    var swells = 0;
+
     ripples.forEach(function (rp) {
+      if (rp.delay > 0) return;
+
+      // the body of the wave: a broad soft band of displaced light
+      if (rp.r > 6 && swells < 8) {
+        var wk = Math.min(1, rp.life / RIPPLE_LIFE);
+        var ws = Math.pow(1 - wk, 1.1) * rp.weight;
+        if (ws >= 0.05) {
+          swells++;
+          var band = 26 + rp.r * 0.42;
+          var inner0 = Math.max(0, rp.r - band), outer0 = rp.r + band;
+
+          var gs = g.createRadialGradient(rp.x, rp.y, inner0, rp.x, rp.y, outer0);
+          gs.addColorStop(0, "transparent");
+          gs.addColorStop(0.45, C.light);
+          gs.addColorStop(1, "transparent");
+          g.globalAlpha = 0.38 * ws;
+          g.fillStyle = gs;
+          g.fillRect(rp.x - outer0, rp.y - outer0, outer0 * 2, outer0 * 2);
+
+          var ti = Math.max(0, rp.r - band * 1.9), to = Math.max(1, rp.r - band * 0.15);
+          var gd = g.createRadialGradient(rp.x, rp.y, ti, rp.x, rp.y, to);
+          gd.addColorStop(0, "transparent");
+          gd.addColorStop(0.6, C.deep);
+          gd.addColorStop(1, "transparent");
+          g.globalAlpha = 0.28 * ws;
+          g.fillStyle = gd;
+          g.fillRect(rp.x - to, rp.y - to, to * 2, to * 2);
+        }
+      }
+
       if (rp.delay > 0) return;
       var k = Math.min(1, rp.life / RIPPLE_LIFE);
       // Gentler fade curve, so a ring stays legible for most of its life
@@ -1147,36 +1163,38 @@
       ring(rp.r, a * 0.92, lw, C.wave);
     });
 
-    g.globalAlpha = 1;
-  }
-
-  function drawRipples() {
-    ctx.lineCap = "round";
+    /* Spray thrown up by an impact belongs to the water as well, so it is
+       drawn here rather than with the objects above. */
     bursts.forEach(function (bu) {
       var k = bu.age / bu.life;
       var r = bu.r * (0.35 + k * 1.9);
-      var g = ctx.createRadialGradient(bu.x, bu.y, 0, bu.x, bu.y, r);
-      g.addColorStop(0, C.light);
-      g.addColorStop(0.35, C.light);
-      g.addColorStop(1, "transparent");
-      ctx.globalAlpha = (1 - k) * (1 - k) * 0.7;
-      ctx.fillStyle = g;
-      ctx.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
+      var grad = g.createRadialGradient(bu.x, bu.y, 0, bu.x, bu.y, r);
+      grad.addColorStop(0, C.light);
+      grad.addColorStop(0.35, C.light);
+      grad.addColorStop(1, "transparent");
+      g.globalAlpha = (1 - k) * (1 - k) * 0.7;
+      g.fillStyle = grad;
+      g.fillRect(bu.x - r, bu.y - r, r * 2, r * 2);
     });
 
     crowns.forEach(function (cr) {
       var k = cr.age / cr.life;
       var r0 = 4 + k * cr.len * cr.speed * 2.1;   // travels out with the rings
       var r1 = r0 + cr.len * (1 - k) * 0.42;
-      ctx.beginPath();
-      ctx.moveTo(cr.x + Math.cos(cr.a) * r0, cr.y + Math.sin(cr.a) * r0);
-      ctx.lineTo(cr.x + Math.cos(cr.a) * r1, cr.y + Math.sin(cr.a) * r1);
-      ctx.strokeStyle = C.light;
-      ctx.globalAlpha = (1 - k) * (1 - k) * 0.6;
-      ctx.lineWidth = 1.7 * (1 - k) + 0.3;
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(cr.x + Math.cos(cr.a) * r0, cr.y + Math.sin(cr.a) * r0);
+      g.lineTo(cr.x + Math.cos(cr.a) * r1, cr.y + Math.sin(cr.a) * r1);
+      g.strokeStyle = C.light;
+      g.globalAlpha = (1 - k) * (1 - k) * 0.6;
+      g.lineWidth = 1.7 * (1 - k) + 0.3;
+      g.stroke();
     });
 
+    g.globalAlpha = 1;
+  }
+
+  function drawRipples() {
+    ctx.lineCap = "round";
     drops.forEach(function (d) {
       var k = 1 - d.age / d.life;
       ctx.beginPath();
