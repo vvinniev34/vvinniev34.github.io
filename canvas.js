@@ -706,6 +706,7 @@
         v: 0,
         wait: Math.random() * 15,
         trail: [],
+        panicCool: 0,
         size: 0.8 + Math.random() * 0.5,
       });
     }
@@ -718,9 +719,17 @@
       // skitter away if the cursor comes near
       var fx = mouse.x - b.x, fy = mouse.y - b.y;
       var fd = Math.sqrt(fx * fx + fy * fy) || 1;
+      b.panicCool -= dt;
       if (mouse.on && fd < 130) {
         b.a = Math.atan2(-fy, -fx) + (Math.random() - 0.5) * 0.6;
-        if (b.v < 3.2) { b.v = 3.6; dimple(b); }
+        if (b.v < 3.2) {
+          b.v = 3.6;
+          /* Rate-limited: sweeping the cursor across the pond startles
+             every strider it passes, and without this each one emitted a
+             ring per frame of contact. Twenty of them doing that filled
+             the ripple budget and crowded out the cursor's own wake. */
+          if (b.panicCool <= 0) { b.panicCool = 1.4; dimple(b); }
+        }
         b.wait = 0.25;
       }
 
@@ -1515,9 +1524,21 @@
          and out-disturbed an actual splash, which defeats the point. */
       wakeCool -= dt;
       var stride = 24 + mouse.vel * 64;
-      if (wakeTravel > stride && wakeCool <= 0 && ripples.length < 30) {
+      if (wakeTravel > stride && wakeCool <= 0) {
         wakeTravel = 0;
         wakeCool = 0.07;
+        /* If the pond is at capacity, evict the faintest ring rather than
+           skipping this one. The cursor's own wake is the most important
+           feedback on the page and must never be the thing that loses. */
+        if (ripples.length >= 46) {
+          var worst = 0, worstScore = Infinity;
+          for (var ei = 0; ei < ripples.length; ei++) {
+            var er = ripples[ei];
+            var score = er.weight * (1 - Math.min(1, er.life / RIPPLE_LIFE));
+            if (score < worstScore) { worstScore = score; worst = ei; }
+          }
+          ripples.splice(worst, 1);
+        }
         addRipple(mouse.x, mouse.y,
                   18 + mouse.vel * 52,           // faster cursor, wider ring
                   0,
