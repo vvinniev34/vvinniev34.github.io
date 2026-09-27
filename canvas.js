@@ -84,9 +84,7 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
-    C.duck      = v("--duck", "#8c7f6d");
-    C.duckHead  = v("--duck-head", "#3f5145");
-    C.duckBill  = v("--duck-bill", "#c2a04e");
+    C.strider   = v("--strider", "#3d4a42");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
@@ -205,7 +203,7 @@
     if (f.rise > 0) {
       f.rise -= dt;
       if (f.rise <= 0) f.rise = 0;
-    } else if (Math.random() < 0.03 * dt) {
+    } else if (Math.random() < 0.018 * dt) {
       f.rise = 1.1 + Math.random() * 0.9;
       addRipple(f.spine[0].x, f.spine[0].y,
                 26 + f.girth * 5, 0,
@@ -687,169 +685,110 @@
 
   var pads = [];
 
-  /* ---- a duck ------------------------------------------------------------
-     Crosses the pond now and then. Slow and large enough to actually
-     follow, which is what the insects were not. It drags a continuous V of
-     wake behind it, pauses to dabble, and the koi get out from under it.
-     Offscreen most of the time — it is an event, not scenery.
+  /* ---- water striders ------------------------------------------------
+     Small insects skating on the surface. They rest, then dart, and each
+     dart dimples the water — which is the other half of where the pond's
+     ambient ripples come from. Their feet leave the four little dimples
+     that make a strider recognisable from above.
      -------------------------------------------------------------------------- */
 
-  var duck = null;
+  var bugs = [];
 
-  function launchDuck() {
-    var edge = (Math.random() * 4) | 0;
-    var m = 90;
-    var x, y, a;
-    if (edge === 0)      { x = -m;     y = Math.random() * H; a = 0; }
-    else if (edge === 1) { x = W + m;  y = Math.random() * H; a = Math.PI; }
-    else if (edge === 2) { x = Math.random() * W; y = -m;     a = Math.PI / 2; }
-    else                 { x = Math.random() * W; y = H + m;  a = -Math.PI / 2; }
-
-    duck = {
-      x: x, y: y,
-      a: a + (Math.random() - 0.5) * 0.7,
-      v: 0.95 + Math.random() * 0.45,
-      wake: 0,
-      dabble: 5 + Math.random() * 9,
-      dip: 0,
-      size: 1,
-      wander: 0,
-    };
+  function makeBugs() {
+    var n = Math.max(8, Math.min(26, Math.round((W * H) / 78000)));
+    bugs = [];
+    for (var i = 0; i < n; i++) {
+      bugs.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        a: Math.random() * TAU,
+        v: 0,
+        wait: Math.random() * 15,
+        size: 0.8 + Math.random() * 0.5,
+      });
+    }
   }
 
-  var nextDuck = 10 + Math.random() * 25;
+  function updateBugs(dt) {
+    for (var i = 0; i < bugs.length; i++) {
+      var b = bugs[i];
 
-  function updateDuck(dt) {
-    if (!duck) {
-      nextDuck -= dt;
-      if (nextDuck <= 0) { nextDuck = 55 + Math.random() * 85; launchDuck(); }
-      return;
-    }
-
-    if (duck.dip > 0) {
-      duck.dip -= dt;                    // head down, barely moving
-      duck.x += Math.cos(duck.a) * duck.v * 0.15;
-      duck.y += Math.sin(duck.a) * duck.v * 0.15;
-    } else {
-      duck.wander += (Math.random() - 0.5) * 0.5 * dt;
-      duck.wander *= 0.96;
-      duck.a += duck.wander * dt;
-
-      // give the cursor a wide berth
-      var dx = duck.x - mouse.x, dy = duck.y - mouse.y;
-      var d = Math.sqrt(dx * dx + dy * dy) || 1;
-      if (mouse.on && d < 200) {
-        var away = Math.atan2(dy, dx);
-        duck.a += Math.atan2(Math.sin(away - duck.a), Math.cos(away - duck.a)) * 1.5 * dt;
+      // skitter away if the cursor comes near
+      var fx = mouse.x - b.x, fy = mouse.y - b.y;
+      var fd = Math.sqrt(fx * fx + fy * fy) || 1;
+      if (mouse.on && fd < 130) {
+        b.a = Math.atan2(-fy, -fx) + (Math.random() - 0.5) * 0.6;
+        if (b.v < 3.2) { b.v = 3.6; dimple(b); }
+        b.wait = 0.25;
       }
 
-      duck.x += Math.cos(duck.a) * duck.v;
-      duck.y += Math.sin(duck.a) * duck.v;
+      b.v *= Math.max(0, 1 - dt * 7);        // a dart is short and sharp
+      b.wait -= dt;
+      if (b.wait <= 0) {
+        b.wait = 7 + Math.random() * 15;      // long rests, short darts
+        b.a += (Math.random() - 0.5) * 1.8;
+        b.v = 2.2 + Math.random() * 2.4;
+        dimple(b);
+      }
 
-      duck.dabble -= dt;
-      if (duck.dabble <= 0) {
-        duck.dabble = 7 + Math.random() * 12;
-        duck.dip = 1.1 + Math.random() * 1.2;
-        addRipple(duck.x + Math.cos(duck.a) * 14, duck.y + Math.sin(duck.a) * 14,
-                  56 + Math.random() * 30, 0, 0.5, 0.7);
-        for (var i = 0; i < 7; i++) {
-          var ang = Math.random() * TAU, sp = 1.4 + Math.random() * 2.6;
-          drops.push({ x: duck.x, y: duck.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-                       r: 1 + Math.random() * 1.8, life: 0.3 + Math.random() * 0.35, age: 0 });
-        }
+      b.x += Math.cos(b.a) * b.v;
+      b.y += Math.sin(b.a) * b.v;
+
+      var m = 40;
+      if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) {
+        b.a = Math.atan2(H / 2 - b.y, W / 2 - b.x) + (Math.random() - 0.5) * 0.8;
+        b.x = Math.max(m, Math.min(W - m, b.x));
+        b.y = Math.max(m, Math.min(H - m, b.y));
       }
     }
-
-    // the wake it pushes out behind
-    duck.wake -= dt;
-    if (duck.wake <= 0) {
-      duck.wake = 0.5 + Math.random() * 0.35;
-      addRipple(duck.x - Math.cos(duck.a) * 10, duck.y - Math.sin(duck.a) * 10,
-                34 + Math.random() * 22, 0, 0.26, 0.4);
-    }
-
-    // koi keep out from under it
-    for (var k = 0; k < fish.length; k++) {
-      var f = fish[k], h = f.spine[0];
-      var fx = h.x - duck.x, fy = h.y - duck.y;
-      var fd = Math.sqrt(fx * fx + fy * fy);
-      if (fd < 110) {
-        var s2 = (1 - fd / 110) * 0.7;
-        if (s2 > f.startle) f.startle = s2;
-        f.wander = Math.atan2(fy, fx);
-      }
-    }
-
-    var out = 150;
-    if (duck.x < -out || duck.x > W + out || duck.y < -out || duck.y > H + out) duck = null;
   }
 
-  function drawDuck() {
-    if (!duck) return;
-    var s = duck.size;
-    var dip = duck.dip > 0 ? Math.min(1, duck.dip) : 0;
+  function dimple(b) {
+    addRipple(b.x, b.y, 14 + Math.random() * 20, 0,
+              0.1 + Math.random() * 0.1, 0.12);
+  }
 
-    // the V it pushes ahead of itself
-    ctx.save();
-    ctx.translate(duck.x, duck.y);
-    ctx.rotate(duck.a);
+  function drawBugs() {
+    for (var i = 0; i < bugs.length; i++) {
+      var b = bugs[i];
+      var s = b.size;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.a);
 
-    ctx.globalAlpha = 0.25;
-    ctx.strokeStyle = C.light;
-    ctx.lineWidth = 1.4;
-    for (var q = -1; q <= 1; q += 2) {
+      // the four footprints pressing into the surface film
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = C.light;
+      for (var q = 0; q < 4; q++) {
+        var lx = (q < 2 ? 4.5 : -3.5) * s;
+        var ly = (q % 2 ? 5.5 : -5.5) * s;
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 2.1 * s, 1.7 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      // legs
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = C.strider;
+      ctx.lineWidth = 0.7 * s;
+      for (var l = 0; l < 4; l++) {
+        var ex = (l < 2 ? 4.5 : -3.5) * s;
+        var ey = (l % 2 ? 5.5 : -5.5) * s;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+
+      // body
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = C.strider;
       ctx.beginPath();
-      ctx.moveTo(-6 * s, q * 3 * s);
-      ctx.quadraticCurveTo(-30 * s, q * 12 * s, -64 * s, q * 26 * s);
-      ctx.stroke();
-    }
-
-    // body, sitting low in the water
-    ctx.globalAlpha = 0.24;
-    ctx.fillStyle = "#03120d";
-    ctx.beginPath();
-    ctx.ellipse(1.5 * s, 2.5 * s, 14 * s, 9 * s, 0, 0, TAU);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.97;
-    ctx.fillStyle = C.duck;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 13.5 * s, 8.5 * s, 0, 0, TAU);
-    ctx.fill();
-
-    // folded wing
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = C.duckHead;
-    ctx.beginPath();
-    ctx.ellipse(-1.5 * s, 0, 8 * s, 5 * s, 0, 0, TAU);
-    ctx.fill();
-
-    // tail
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = C.duck;
-    ctx.beginPath();
-    ctx.moveTo(-12 * s, -3 * s);
-    ctx.lineTo(-20 * s, 0);
-    ctx.lineTo(-12 * s, 3 * s);
-    ctx.closePath();
-    ctx.fill();
-
-    // head and bill, tucked forward and down when dabbling
-    var hx = (12 - dip * 7) * s;
-    ctx.globalAlpha = 0.97 - dip * 0.35;
-    ctx.fillStyle = C.duckHead;
-    ctx.beginPath();
-    ctx.ellipse(hx, 0, 5.2 * s, 4.6 * s, 0, 0, TAU);
-    ctx.fill();
-
-    if (dip < 0.7) {
-      ctx.fillStyle = C.duckBill;
-      ctx.beginPath();
-      ctx.ellipse(hx + 5.4 * s, 0, 3.4 * s, 1.9 * s, 0, 0, TAU);
+      ctx.ellipse(0, 0, 3.1 * s, 1.1 * s, 0, 0, TAU);
       ctx.fill();
-    }
 
-    ctx.restore();
+      ctx.restore();
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1529,7 +1468,7 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
     updateDuckweed(dt);
-    updateDuck(dt);
+    updateBugs(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
        distance travelled rather than per frame, so the trail is even at any
@@ -1586,7 +1525,7 @@
        which you can watch happen. */
     nextAmbient -= dt;
     if (nextAmbient <= 0 && weeds.length && ripples.length < 40) {
-      nextAmbient = 0.8 + Math.random() * 1.8;
+      nextAmbient = 1.3 + Math.random() * 3;
       var wd = weeds[(Math.random() * weeds.length) | 0];
       addRipple(wd.x + (Math.random() - 0.5) * 40,
                 wd.y + (Math.random() - 0.5) * 40,
@@ -1638,8 +1577,8 @@
     ctx.globalAlpha = 1;
 
     drawDuckweed();      // floating leaves, carried by the waves
+    drawBugs();          // striders on the surface film
     drawPads();          // floating on the surface, so over the fish
-    drawDuck();
   }
 
   var last = 0;
@@ -1683,6 +1622,7 @@
     makePads();
     padBuoyancy();
     makeDuckweed();
+    makeBugs();
     stock();
   }
 
@@ -1732,7 +1672,6 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
-    duck: function () { return duck; },
     caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
   };
