@@ -54,6 +54,10 @@
      render the surface closer to full resolution, which matters now that
      the ripple crests live on this layer. */
   var LIGHT_SCALE = 0.7;
+  /* The surface is its own canvas, so skipping a frame simply leaves the
+     previous one on screen. Ripples expand over seconds, not frames — at
+     30Hz the difference is invisible and it halves the layer's cost. */
+  var lightPhase = 0;
   var cv = fgCv;                      // pointer position is read off this one
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -413,15 +417,14 @@
     var w = widthAt(i, f);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
-    [1, -1].forEach(function (s) {
-      ctx.save();
-      ctx.translate(p.x - (dy / d) * w * s * 0.5, p.y + (dx / d) * w * s * 0.5);
-      ctx.rotate(ang + s * 0.85);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, f.girth * 0.6, f.girth * 0.22, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    });
+    ctx.beginPath();
+    for (var side = -1; side <= 1; side += 2) {
+      var ox = p.x - (dy / d) * w * side * 0.5;
+      var oy = p.y + (dx / d) * w * side * 0.5;
+      ctx.moveTo(ox + f.girth * 0.6, oy);
+      ctx.ellipse(ox, oy, f.girth * 0.6, f.girth * 0.22, ang + side * 0.85, 0, Math.PI * 2);
+    }
+    ctx.fill();
   }
 
   function drawFish(f) {
@@ -447,9 +450,12 @@
     ctx.fill();
 
     /* Markings are clipped to the body so they read as patches rather than
-       blobs — but clipping is expensive and at ~40px a koi's markings are
-       a couple of pixels, so the smallest fish skip it entirely. */
-    if (f.girth < 5.5) {
+       blobs. clip() is one of the more expensive canvas operations, and
+       below a certain size the markings are a few pixels across and the
+       clip changes nothing anyone can see — so only the largest koi pay
+       for it. Threshold raised from girth 5.5 to 9, which takes most of
+       the school off the clipped path. */
+    if (f.girth < 13) {
       ctx.globalAlpha = 0.8 * fade;
       ctx.fillStyle = f.pal.patch;
       var sp = f.spine[4];
@@ -481,11 +487,12 @@
     var eo = widthAt(2, f) * 0.6, er = Math.max(0.6, f.girth * 0.15);
     ctx.globalAlpha = 0.72 * fade;
     ctx.fillStyle = "#17140f";
+    ctx.beginPath();
     for (var q = -1; q <= 1; q += 2) {
-      ctx.beginPath();
+      ctx.moveTo(e.x + enx * eo * q + er, e.y + eny * eo * q);
       ctx.arc(e.x + enx * eo * q, e.y + eny * eo * q, er, 0, Math.PI * 2);
-      ctx.fill();
     }
+    ctx.fill();
 
     ctx.globalAlpha = 1;
   }
@@ -712,7 +719,8 @@
   function drawWater() {
     // The floor is its own canvas and never repaints; the light is its own
     // canvas and paints itself. Nothing to composite here any more.
-    drawLight();
+    lightPhase ^= 1;
+    if (lightPhase) drawLight();
     drawWeeds();
   }
 
@@ -733,7 +741,7 @@
   var bugs = [];
 
   function makeBugs() {
-    var n = Math.max(8, Math.min(26, Math.round((W * H) / 78000)));
+    var n = Math.max(5, Math.min(14, Math.round((W * H) / 165000)));
     bugs = [];
     for (var i = 0; i < n; i++) {
       bugs.push({
@@ -741,7 +749,7 @@
         y: Math.random() * H,
         a: Math.random() * TAU,
         v: 0,
-        wait: Math.random() * 15,
+        wait: Math.random() * 12,
         trail: [],
         panicCool: 0,
         size: 0.8 + Math.random() * 0.5,
@@ -774,7 +782,7 @@
       b.v *= Math.max(0, 1 - dt * 7);        // a dart is short and sharp
       b.wait -= dt;
       if (b.wait <= 0) {
-        b.wait = 7 + Math.random() * 15;      // long rests, short darts
+        b.wait = 5 + Math.random() * 12;      // long rests, short darts
         b.a += (Math.random() - 0.5) * 1.8;
         b.v = 2.2 + Math.random() * 2.4;
         dimple(b);
@@ -894,9 +902,16 @@
     }
   }
 
+  var weedPhase = 0;
+
   function updateDuckweed(dt) {
+    /* ~150 leaves each sampling every live ripple is the biggest physics
+       cost in the scene. Half the mat is updated per frame, alternating;
+       a leaf drifts a fraction of a pixel a frame so nobody can tell. */
+    weedPhase ^= 1;
     for (var i = 0; i < weed2.length; i++) {
       var p = weed2[i];
+      if ((i & 1) === weedPhase) { p.x += p.vx; p.y += p.vy; continue; }
       waveForce(p.x, p.y, _wf, false);
       p.vx += _wf[0] * 1.5;
       p.vy += _wf[1] * 1.5;
@@ -1008,13 +1023,13 @@
       ctx.globalAlpha = 0.3;
       ctx.strokeStyle = C.padRim;
       ctx.lineWidth = 0.9;
+      ctx.beginPath();
       for (var v = 0; v < 7; v++) {
         var a = 0.6 + (v / 6) * (Math.PI * 2 - 1.2);
-        ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(Math.cos(a) * p.r * 0.88, Math.sin(a) * p.r * 0.88);
-        ctx.stroke();
       }
+      ctx.stroke();
 
       if (p.flower) {
         ctx.globalAlpha = 0.95;
@@ -1291,41 +1306,45 @@
 
   var TAU = Math.PI * 2;
 
-  /* Radius of a ripple at a given angle: its own procedural buckle, plus
-     whatever the cursor has dented into it. */
-  function sampleR(rp, ang, radius, k) {
-    var warp = 1
-      + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
-      + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
-      + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
-    var f = ((ang + TAU) % TAU) / TAU * RN;
-    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
-    return radius * warp + rp.def[i0] * (1 - m) + rp.def[i1] * m;
-  }
+  /* Per-angle geometry for one ripple, computed once a frame and shared by
+     all four of its strokes. Each stroke used to re-derive the same three
+     sines and the same def/cut interpolation for every point, so three
+     quarters of that trig was redundant. */
 
-  function cutAt(rp, ang) {
-    var f = ((ang + TAU) % TAU) / TAU * RN;
-    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
-    return rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
+  var _warp = [], _defA = [], _cutA = [], _steps = 0;
+
+  function cacheRing(rp, k) {
+    _steps = Math.max(10, Math.min(30, Math.round(rp.r / 6)));
+    for (var i = 0; i <= _steps; i++) {
+      var ang = (i / _steps) * TAU;
+      _warp[i] = 1
+        + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
+        + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
+        + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
+
+      var f = (ang / TAU) * RN;
+      var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+      _defA[i] = rp.def[i0] * (1 - m) + rp.def[i1] * m;
+      _cutA[i] = rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
+    }
   }
 
   /* One crest line. Walks the circumference and strokes the runs that
      survive, so a torn ring comes out as separate arcs. An untouched ring
      has cut[] all zero and simply emits one unbroken run — same code. */
-  function crest(g, rp, k, radius, alpha, width, colour) {
-    var steps = Math.max(10, Math.min(32, Math.round(radius / 6)));
+  function crest(g, rp, radius, alpha, width, colour) {
     g.strokeStyle = colour;
     g.lineWidth = width;
     g.lineJoin = "round";
     var open = false;
-    for (var i = 0; i <= steps; i++) {
-      var ang = (i / steps) * TAU;
-      var c = cutAt(rp, ang);
+    for (var i = 0; i <= _steps; i++) {
+      var c = _cutA[i];
       if (c > 0.6) {
         if (open) { g.stroke(); open = false; }
         continue;
       }
-      var r = sampleR(rp, ang, radius, k);
+      var ang = (i / _steps) * TAU;
+      var r = radius * _warp[i] + _defA[i];
       var px = rp.x + Math.cos(ang) * r, py = rp.y + Math.sin(ang) * r;
       if (!open) {
         g.beginPath();
@@ -1339,8 +1358,6 @@
     if (open) g.stroke();
   }
 
-  /* The body of a wave: a broad band of lifted light, with its trough
-     behind it. */
   /* The body of a wave.
 
      This used to be two radial gradients centred on the ripple — perfect
@@ -1357,8 +1374,12 @@
     if (ws < 0.04) return;
     var band = 4 + rp.r * 0.16;
 
-    crest(g, rp, k, Math.max(1, rp.r - band * 0.95), 0.17 * ws, band * 1.15, C.deep);
-    crest(g, rp, k, rp.r,                            0.26 * ws, band * 1.5,  C.light);
+    /* Stroke width is capped: a 230px ripple was painting a 61px-wide band
+       around its whole circumference, ~88k pixels for one stroke. */
+    var trough = Math.min(band * 1.15, 26);
+    var body   = Math.min(band * 1.5, 34);
+    crest(g, rp, Math.max(1, rp.r - band * 0.95), 0.19 * ws, trough, C.deep);
+    crest(g, rp, rp.r,                            0.3 * ws,  body,   C.light);
   }
 
   /* ---- wavefronts --------------------------------------------------------
@@ -1470,13 +1491,14 @@
       if (rp.delay > 0) continue;
       var k = Math.min(1, rp.life / RIPPLE_LIFE);
 
+      cacheRing(rp, k);          // once, for all four strokes below
       if (rp.r > 4) swell(g, rp, k);
 
       var a = Math.pow(1 - k, 1.25) * 0.88 * rp.weight;
       if (a <= 0.004) continue;
       var lw = (1.9 * rp.weight + 0.5) * (1 - k * 0.35);
-      crest(g, rp, k, rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
-      crest(g, rp, k, rp.r, a * 0.92, lw, C.wave);
+      crest(g, rp, rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
+      crest(g, rp, rp.r, a * 0.92, lw, C.wave);
     }
 
     /* Spray thrown up by an impact belongs to the water as well, so it is
