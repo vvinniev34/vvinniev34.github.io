@@ -133,7 +133,90 @@ body::after {
   overflow: hidden;
 }
 
-.card__intro { display: block; padding: clamp(1.5rem, 3vw, 2.25rem); }
+/* The card is fixed in the middle of the pond and scrolls internally,
+   rather than the page scrolling underneath it. */
+.card__body {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - clamp(3rem, 8vh, 6rem));
+}
+
+.card__intro {
+  display: block;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--rule) 70%, transparent) transparent;
+}
+.card__intro::-webkit-scrollbar { width: 7px; }
+.card__intro::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--rule) 70%, transparent);
+  border-radius: 4px;
+}
+
+/* ---- minimising ---------------------------------------------------------- */
+
+.card__toggle {
+  position: absolute;
+  top: .55rem;
+  right: .6rem;
+  z-index: 2;
+  width: 1.9rem;
+  height: 1.9rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.card__toggle:hover { background: var(--wash); }
+.card__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card__toggle span {
+  display: block;
+  width: .68rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--fg-soft);
+  transition: transform .25s var(--ease);
+}
+/* the minus becomes a plus when collapsed */
+.card__toggle span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: .68rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--fg-soft);
+  transform: rotate(90deg) scaleX(0);
+  transition: transform .25s var(--ease);
+}
+
+.card { position: relative; transition: max-width .35s var(--ease); }
+
+.card.is-min { max-width: 17rem; }
+.card.is-min .card__body { display: none; }
+.card.is-min .card__toggle span { transform: rotate(180deg); }
+.card.is-min .card__toggle span::after { transform: rotate(90deg) scaleX(1); }
+
+/* Just the name, shown only while collapsed. */
+.card__tab {
+  display: none;
+  padding: .72rem 3rem .72rem 1.1rem;
+  font-family: var(--mono);
+  font-size: .78rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--fg-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card.is-min .card__tab { display: block; }
 
 .card__term {
   display: flex;
@@ -695,7 +778,9 @@ code {
     max-width: none;
     padding: 0;
   }
-  .card__term, .card__links { display: none; }
+  .card__term, .card__links, .card__toggle, .card__tab { display: none; }
+  .card__body { display: block; max-height: none; }
+  .card__intro { overflow: visible; }
   .card { display: block; }
   .card__intro { padding: 0; }
   .card__intro > .masthead > * { animation: none !important; }

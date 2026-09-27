@@ -535,37 +535,20 @@
      was added. A jittered grid gives even coverage while still looking
      unplanned — one item per cell, positioned at random within it.
 
-     It also biases away from the centre column, because the card sits
-     there and most of what lands behind it is never seen. Not all of it:
-     the card is translucent and a bare strip behind it would be obvious.
+     No bias away from the card: it is translucent, it can be minimised,
+     and a bare strip behind it would be more obvious than the detail it
+     hides.
      -------------------------------------------------------------------------- */
 
-  function cardHalfWidth() {
-    return Math.min(W * 0.34, 350);
-  }
-
-  function scatter(count, spillBias) {
+  function scatter(count) {
     var cols = Math.max(1, Math.round(Math.sqrt(count * (W / H))));
     var rows = Math.max(1, Math.ceil(count / cols));
     var cw = W / cols, ch = H / rows;
-    var half = cardHalfWidth(), mid = W / 2;
     var out = [];
 
     for (var r = 0; r < rows && out.length < count; r++) {
       for (var c = 0; c < cols && out.length < count; c++) {
-        var x = (c + Math.random()) * cw;
-        var y = (r + Math.random()) * ch;
-
-        // most of what falls behind the card moves out to a visible margin
-        if (spillBias !== 0 && Math.abs(x - mid) < half &&
-            Math.random() < (spillBias == null ? 0.6 : spillBias)) {
-          var leftRoom = mid - half, rightRoom = W - (mid + half);
-          if (leftRoom + rightRoom > 20) {
-            var pick = Math.random() * (leftRoom + rightRoom);
-            x = pick < leftRoom ? pick : (mid + half) + (pick - leftRoom);
-          }
-        }
-        out.push({ x: x, y: y });
+        out.push({ x: (c + Math.random()) * cw, y: (r + Math.random()) * ch });
       }
     }
     return out;
@@ -586,7 +569,7 @@
     g.fillStyle = base;
     g.fillRect(0, 0, W, H);
 
-    var siltPts = scatter(130, 0.25);
+    var siltPts = scatter(130);
     for (var i = 0; i < siltPts.length; i++) {
       var x = siltPts[i].x, y = siltPts[i].y;
       var r = 20 + Math.random() * (W / 5);

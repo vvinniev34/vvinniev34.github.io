@@ -285,6 +285,36 @@
     doc.appendChild(el("footer", { class: "footer", html: inline(R.footer) }));
   }
 
+  /* ---- minimising the card -------------------------------------------------
+     Collapses to a small labelled tab so the pond can be seen whole. The
+     choice sticks, because someone who wants the pond probably wants it
+     next time too.
+     ------------------------------------------------------------------------ */
+
+  (function minimise() {
+    var card = document.getElementById("card");
+    var btn = document.getElementById("card-toggle");
+    var tab = document.getElementById("card-tab");
+    if (!card || !btn) return;
+
+    if (tab) tab.textContent = R.name || "";
+
+    function apply(min) {
+      card.classList.toggle("is-min", min);
+      btn.setAttribute("aria-expanded", min ? "false" : "true");
+      btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
+      try { localStorage.setItem("cardMin", min ? "1" : "0"); } catch (e) {}
+    }
+
+    var saved = null;
+    try { saved = localStorage.getItem("cardMin"); } catch (e) {}
+    if (saved === "1") apply(true);
+
+    btn.addEventListener("click", function () {
+      apply(!card.classList.contains("is-min"));
+    });
+  })();
+
   /* ---- theme toggle ------------------------------------------------------- */
 
   document.getElementById("theme").addEventListener("click", function () {

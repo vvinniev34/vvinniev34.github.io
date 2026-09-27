@@ -20,10 +20,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&display=swap">
 <!-- ?v=N busts GitHub Pages' 10-minute cache. Bump it when you change a file. -->
-<link rel="stylesheet" href="style.css?v=57">
+<link rel="stylesheet" href="style.css?v=58">
 
 <!-- Your content. Loaded before the renderer so it's available immediately. -->
-<script src="resume.js?v=57"></script>
+<script src="resume.js?v=58"></script>
 </head>
 
 <body>
@@ -33,10 +33,16 @@
 </button>
 
 <main class="shell">
-  <article class="card">
-    <section class="card__intro" id="intro"></section>
-    <section class="card__term"  id="termcol"></section>
-    <nav class="card__links" id="links" aria-label="Links"></nav>
+  <article class="card" id="card">
+    <button class="card__toggle" id="card-toggle" type="button"
+            aria-expanded="true" aria-controls="card-body"
+            aria-label="Minimise"><span></span></button>
+    <span class="card__tab" id="card-tab" aria-hidden="true"></span>
+    <div class="card__body" id="card-body">
+      <section class="card__intro" id="intro"></section>
+      <section class="card__term"  id="termcol"></section>
+      <nav class="card__links" id="links" aria-label="Links"></nav>
+    </div>
   </article>
 </main>
 
@@ -54,8 +60,8 @@
   </div>
 </noscript>
 
-<script src="site.js?v=57"></script>
-<script src="canvas.js?v=57"></script>
-<script src="terminal.js?v=57"></script>
+<script src="site.js?v=58"></script>
+<script src="canvas.js?v=58"></script>
+<script src="terminal.js?v=58"></script>
 </body>
 </html>
