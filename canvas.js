@@ -680,41 +680,22 @@
     lightCtx.setTransform(LW / W, 0, 0, LH / H, 0, 0);
   }
 
-  function sheenBands(g) {
-    for (var i = 0; i < 2; i++) {
-      var ang = 0.5 + i * 0.35;
-      var off = ((t * (0.035 + i * 0.02) + i * 0.5) % 1.6) - 0.3;
-      var sx = W * off, sy = H * (off * 0.4);
-      var sg = g.createLinearGradient(sx, sy,
-                                      sx + Math.cos(ang) * W * 0.55,
-                                      sy + Math.sin(ang) * H * 0.9);
-      sg.addColorStop(0, "transparent");
-      sg.addColorStop(0.5, C.light);
-      sg.addColorStop(1, "transparent");
-      g.globalAlpha = 0.16;
-      g.fillStyle = sg;
-      g.fillRect(0, 0, W, H);
-    }
-  }
-
   function drawLight() {
     var g = lightCtx;
     if (!g) return;
     g.clearRect(0, 0, W, H);
     g.imageSmoothingEnabled = true;
 
+    /* A single quiet caustic pass. This used to be two bright layers plus
+       two drifting sheen bands, which read as a separate weather system
+       moving over the pond — high contrast, distracting, and completely
+       indifferent to the cursor. All the visible life on the surface now
+       comes from ripples, which means all of it is deformable and all of
+       it responds to the mouse. This is just texture underneath. */
     if (cCv) {
       renderCaustics();
-      g.globalAlpha = 0.5;
+      g.globalAlpha = 0.2;
       g.drawImage(cCv, 0, 0, W, H);
-      // mirrored as well as offset, so the two layers interfere rather than
-      // showing the same web twice
-      g.save();
-      g.translate(W, 0);
-      g.scale(-1, 1);
-      g.globalAlpha = 0.34;
-      g.drawImage(cCv, -W * 0.13, -H * 0.17, W * 1.37, H * 1.41);
-      g.restore();
     }
 
     /* Surface swell: each ring pushes a broad band of light through the
@@ -737,7 +718,7 @@
       gs.addColorStop(0, "transparent");
       gs.addColorStop(0.45, C.light);
       gs.addColorStop(1, "transparent");
-      g.globalAlpha = 0.5 * ws;
+      g.globalAlpha = 0.38 * ws;
       g.fillStyle = gs;
       g.fillRect(cx - outer, cy - outer, outer * 2, outer * 2);
 
@@ -746,7 +727,7 @@
       gd.addColorStop(0, "transparent");
       gd.addColorStop(0.6, C.deep);
       gd.addColorStop(1, "transparent");
-      g.globalAlpha = 0.38 * ws;
+      g.globalAlpha = 0.28 * ws;
       g.fillStyle = gd;
       g.fillRect(cx - to, cy - to, to * 2, to * 2);
     }
@@ -756,7 +737,6 @@
     // over it. Everything that disturbs the surface now disturbs one thing.
     drawRings(g);
 
-    sheenBands(g);
     g.globalAlpha = 1;
   }
 
@@ -1272,10 +1252,16 @@
     }
 
     // Every so often something touches the surface on its own.
+    /* Ambient ripples are now the pond's resting motion, so they arrive
+       often rather than occasionally. They are ordinary ripples: the same
+       kind the cursor makes and a click makes, so they dent, tear and get
+       dragged about exactly the same way. */
     nextAmbient -= dt;
-    if (nextAmbient <= 0) {
-      nextAmbient = 4 + Math.random() * 7;
-      addRipple(Math.random() * W, Math.random() * H, 26 + Math.random() * 30, 0, 0.55, 0.45);
+    if (nextAmbient <= 0 && ripples.length < 34) {
+      nextAmbient = 0.55 + Math.random() * 1.5;
+      addRipple(Math.random() * W, Math.random() * H,
+                34 + Math.random() * 70, 0,
+                0.22 + Math.random() * 0.24, 0.3);
     }
   }
 
