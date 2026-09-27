@@ -64,7 +64,7 @@
 
   var W = 0, H = 0, dpr = 1, t = 0;
   var fish = [], ripples = [], drops = [], pellets = [];
-  var cavities = [], jets = [], foam = [];
+  var jets = [], foam = [];
   var mouse = { x: -9999, y: -9999, px: -9999, py: -9999, on: false, vel: 0, dx: 0, dy: 0 };
   var running = false, raf = null, nextAmbient = 3;
   var wakeTravel = 0, wakeCool = 0;   // cursor travel / cooldown between wake rings
@@ -1230,11 +1230,6 @@
        size and a different moment, so the two never look like a pair. */
     addRipple(x, y, 230, 0, 1.35, 1);
 
-    /* The cavity. Something hitting water punches a depression before it
-       throws anything up, and that dark hole is most of what makes an
-       impact read as water rather than as a flash of light. */
-    cavities.push({ x: x, y: y, age: 0, life: 0.5, r: 30 });
-
     /* Foam as separate torn flecks around the rim, not a bright disc in
        the middle. The disc read as a flash of light; real thrown water
        breaks up. */
@@ -1309,10 +1304,6 @@
       rp.life += dt;
       rp.r = rp.max * (1 - Math.pow(1 - Math.min(1, rp.life / RIPPLE_LIFE), 2.2));
       if (rp.life > RIPPLE_LIFE) ripples.splice(i, 1);
-    }
-    for (var cv2 = cavities.length - 1; cv2 >= 0; cv2--) {
-      cavities[cv2].age += dt;
-      if (cavities[cv2].age >= cavities[cv2].life) cavities.splice(cv2, 1);
     }
     for (var fk = foam.length - 1; fk >= 0; fk--) {
       var fm = foam[fk];
@@ -1558,20 +1549,6 @@
 
     /* Spray thrown up by an impact belongs to the water as well, so it is
        drawn here rather than with the objects above. */
-    /* Cavity first, beneath everything: a dark bowl that opens fast and
-       closes slowly. */
-    cavities.forEach(function (cavity) {
-      var ck = cavity.age / cavity.life;
-      var cr = cavity.r * (0.5 + Math.pow(ck, 0.45) * 1.5);
-      var cg = g.createRadialGradient(cavity.x, cavity.y, 0, cavity.x, cavity.y, cr);
-      cg.addColorStop(0, C.deep);
-      cg.addColorStop(0.62, C.deep);
-      cg.addColorStop(1, "transparent");
-      g.globalAlpha = (1 - ck) * (1 - ck) * 0.7;
-      g.fillStyle = cg;
-      g.fillRect(cavity.x - cr, cavity.y - cr, cr * 2, cr * 2);
-    });
-
     /* Torn foam around the rim, all in one path. */
     if (foam.length) {
       g.fillStyle = C.wave;
