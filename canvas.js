@@ -62,6 +62,11 @@
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* Phones get no pond at all — CSS hides the canvases, and this stops us
+     simulating and painting something nobody can see, on the hardware
+     least able to spare the battery. 38rem matches the stylesheet. */
+  function phone() { return (window.innerWidth || 0) <= 608; }
+
   var TAU = Math.PI * 2;
   var W = 0, H = 0, dpr = 1, t = 0;
   var fish = [], ripples = [], spray = [], pellets = [];
@@ -1854,7 +1859,7 @@
   }
 
   function start() {
-    if (running || reduced) return;
+    if (running || reduced || phone()) return;
     running = true;
     last = 0;
     raf = requestAnimationFrame(frame);
@@ -1903,7 +1908,7 @@
   }
 
   readColors();
-  resize();
+  if (!phone()) resize();
 
   /* Public API, used by the terminal's `feed` and `koi` commands. */
   window.pond = {
@@ -1942,7 +1947,9 @@
     food: function () { return pellets; },
   };
 
-  if (reduced) {
+  if (phone()) {
+    // nothing to start; a resize back above the breakpoint will set it up
+  } else if (reduced) {
     for (var k = 0; k < 220; k++) step(0.016);   // let them spread out
     draw();
   } else {
@@ -1952,7 +1959,12 @@
   var rt;
   window.addEventListener("resize", function () {
     clearTimeout(rt);
-    rt = setTimeout(function () { readColors(); resize(); }, 180);
+    rt = setTimeout(function () {
+      if (phone()) { stop(); return; }      // rotated or shrunk into phone range
+      readColors();
+      resize();
+      start();
+    }, 180);
   });
 
   // The canvas is fixed to the viewport, so client coordinates are already
@@ -1977,7 +1989,9 @@
     if (e.target && e.target.closest &&
         e.target.closest("a, button, input, textarea, select, .term")) return;
     splash(e.clientX, e.clientY);
-    if (reduced) { step(0.016); draw(); }
+    if (phone()) {
+    // nothing to start; a resize back above the breakpoint will set it up
+  } else if (reduced) { step(0.016); draw(); }
   }, { passive: true });
   document.addEventListener("visibilitychange", function () {
     document.hidden ? stop() : start();

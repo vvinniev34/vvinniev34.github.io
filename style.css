@@ -517,6 +517,44 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   .term { font-size: .72rem; }
 }
 
+/* ---- phones --------------------------------------------------------------
+   No pond. At this size it is all texture and no room: the koi are mostly
+   behind the card, the floor detail is too small to read, and it costs
+   battery on the hardware least able to spare it. The card becomes the
+   whole screen instead. canvas.js stops simulating below the same width.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 38rem) {
+  .pond { display: none !important; }
+
+  .shell {
+    padding: 0;
+    min-height: 100dvh;
+    align-items: stretch;
+  }
+
+  .card {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+  }
+
+  /* nothing behind it left to reveal */
+  .card__toggle, .card__tab { display: none !important; }
+  .card.is-min .card__body { display: flex; }
+
+  .card__body { max-height: 100dvh; min-height: 100dvh; }
+  .card__intro { padding: clamp(1.4rem, 6vw, 2rem); }
+  .card__term { padding: 0 clamp(1.4rem, 6vw, 2rem); }
+  .card__links { padding: .85rem clamp(1.4rem, 6vw, 2rem); }
+  .term { min-height: 12rem; max-height: min(44dvh, 22rem); }
+}
+
 /* ---- sections ------------------------------------------------------------- */
 
 .section { margin-top: var(--step); }
