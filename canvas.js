@@ -129,7 +129,7 @@
     /* Temperament: some koi are idlers, some are brisk. This is a much wider
        spread than size alone gave, so the school stops moving as one mass. */
     var temper = 0.45 + Math.random() * 1.2;
-    var cruise = (0.3 + Math.random() * 0.18) * temper * (1.22 - scale * 0.2);
+    var cruise = (0.44 + Math.random() * 0.26) * temper * (1.22 - scale * 0.2);
 
     var f = {
       pal: pal,
@@ -145,7 +145,7 @@
       /* Hard ceiling on velocity, and a startle level that decays, so nothing
          can change direction or speed instantaneously. Bigger fish have a
          higher top speed but accelerate and turn more sluggishly. */
-      maxSpeed: 2.3 * (0.85 + scale * 0.3) * (0.7 + temper * 0.45),
+      maxSpeed: 2.8 * (0.85 + scale * 0.3) * (0.7 + temper * 0.45),
       startle: 0,
       rise: 0,          // counts down while the fish is at the surface
       /* Each fish also breathes its own slow rhythm of effort, and now and
@@ -281,7 +281,7 @@
        ~15° a frame and the body had to follow in a hairpin. */
     var diff = Math.atan2(Math.sin(desired - f.heading), Math.cos(desired - f.heading));
     var turn = diff * (0.035 + fleeing * 0.22) * dt * 60;
-    var maxTurn = (0.028 + fleeing * 0.05) * Math.min(f.slow, 1.15) * dt * 60;
+    var maxTurn = (0.036 + fleeing * 0.055) * Math.min(f.slow, 1.15) * dt * 60;
     if (turn > maxTurn) turn = maxTurn;
     else if (turn < -maxTurn) turn = -maxTurn;
     f.heading += turn;
@@ -295,14 +295,14 @@
        actually behaves. */
     // Spontaneous dart: roughly once every ten seconds, unprompted.
     f.dash *= Math.max(0, 1 - dt * 0.85);
-    if (Math.random() < 0.0018 * dt * 60) f.dash = 0.35 + Math.random() * 0.5;
+    if (Math.random() < 0.0034 * dt * 60) f.dash = 0.35 + Math.random() * 0.55;
 
     // Slow personal rhythm of effort on top of the cruising speed.
     var effort = f.base * (0.72 + 0.4 * Math.sin(t * f.effortRate + f.effortPhase));
     var urge = panic > f.dash ? panic : f.dash;
     var want = effort + urge * (f.maxSpeed - effort);
     var dv = want - f.speed;
-    var cap = (dv > 0 ? 0.045 : 0.07) * Math.min(f.slow, 1.2) * dt * 60;
+    var cap = (dv > 0 ? 0.055 : 0.08) * Math.min(f.slow, 1.2) * dt * 60;
     if (dv > cap) dv = cap;
     else if (dv < -cap) dv = -cap;
     f.speed += dv;
