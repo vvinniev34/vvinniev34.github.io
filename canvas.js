@@ -591,6 +591,7 @@
       var clumpFill = ctx.createLinearGradient(cl.x, cl.y, cl.x, cl.y - cl.reach);
       clumpFill.addColorStop(0, C.weed);
       clumpFill.addColorStop(1, C.weedTip);
+      ctx.beginPath();
       for (var b = 0; b < cl.blades.length; b++) {
         var bl = cl.blades[b];
         // every blade in a clump leans with the same slow current…
@@ -608,17 +609,17 @@
         var cyp = cl.y + uy * L * 0.5 + ny * sway * L * 0.3;
 
         var hw = bl.w * 0.5;
-        ctx.beginPath();
         ctx.moveTo(cl.x + nx * hw, cl.y + ny * hw);
         ctx.quadraticCurveTo(cxp + nx * hw * 0.5, cyp + ny * hw * 0.5, tipx, tipy);
         ctx.quadraticCurveTo(cxp - nx * hw * 0.5, cyp - ny * hw * 0.5,
                              cl.x - nx * hw, cl.y - ny * hw);
         ctx.closePath();
 
-        ctx.globalAlpha = 0.88;
-        ctx.fillStyle = clumpFill;
-        ctx.fill();
       }
+      // one fill for the whole clump
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle = clumpFill;
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -704,6 +705,7 @@
         a: Math.random() * TAU,
         v: 0,
         wait: Math.random() * 15,
+        trail: [],
         size: 0.8 + Math.random() * 0.5,
       });
     }
@@ -734,6 +736,17 @@
       b.x += Math.cos(b.a) * b.v;
       b.y += Math.sin(b.a) * b.v;
 
+      /* A short wake behind it while it is actually moving. Drawn as a
+         fading trail rather than spawned as ripples — one ripple per dart
+         is right, but twenty striders each emitting a stream of them would
+         bury the surface. */
+      if (b.v > 0.5) {
+        b.trail.push(b.x, b.y);
+        if (b.trail.length > 14) b.trail.splice(0, 2);
+      } else if (b.trail.length) {
+        b.trail.splice(0, 2);
+      }
+
       var m = 40;
       if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) {
         b.a = Math.atan2(H / 2 - b.y, W / 2 - b.x) + (Math.random() - 0.5) * 0.8;
@@ -749,6 +762,19 @@
   }
 
   function drawBugs() {
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = C.light;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (var w = 0; w < bugs.length; w++) {
+      var tr = bugs[w].trail;
+      if (tr.length < 4) continue;
+      ctx.moveTo(tr[0], tr[1]);
+      for (var q2 = 2; q2 < tr.length; q2 += 2) ctx.lineTo(tr[q2], tr[q2 + 1]);
+      ctx.lineTo(bugs[w].x, bugs[w].y);
+    }
+    ctx.stroke();
+
     for (var i = 0; i < bugs.length; i++) {
       var b = bugs[i];
       var s = b.size;
@@ -756,29 +782,28 @@
       ctx.translate(b.x, b.y);
       ctx.rotate(b.a);
 
-      // the four footprints pressing into the surface film
+      // four footprints dimpling the surface film — one path, one fill
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = C.light;
+      ctx.beginPath();
       for (var q = 0; q < 4; q++) {
         var lx = (q < 2 ? 4.5 : -3.5) * s;
         var ly = (q % 2 ? 5.5 : -5.5) * s;
-        ctx.beginPath();
+        ctx.moveTo(lx + 2.1 * s, ly);
         ctx.ellipse(lx, ly, 2.1 * s, 1.7 * s, 0, 0, TAU);
-        ctx.fill();
       }
+      ctx.fill();
 
-      // legs
+      // legs — likewise one path, one stroke
       ctx.globalAlpha = 0.5;
       ctx.strokeStyle = C.strider;
       ctx.lineWidth = 0.7 * s;
+      ctx.beginPath();
       for (var l = 0; l < 4; l++) {
-        var ex = (l < 2 ? 4.5 : -3.5) * s;
-        var ey = (l % 2 ? 5.5 : -5.5) * s;
-        ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.lineTo(ex, ey);
-        ctx.stroke();
+        ctx.lineTo((l < 2 ? 4.5 : -3.5) * s, (l % 2 ? 5.5 : -5.5) * s);
       }
+      ctx.stroke();
 
       // body
       ctx.globalAlpha = 0.85;
@@ -808,7 +833,7 @@
     for (var d = 0; d < drifts; d++) {
       var cx = Math.random() * W, cy = Math.random() * H;
       var spread = 70 + Math.random() * 130;
-      var n = 14 + (Math.random() * 26 | 0);
+      var n = 10 + (Math.random() * 18 | 0);
       for (var i = 0; i < n; i++) {
         var a = Math.random() * TAU, r = Math.pow(Math.random(), 0.6) * spread;
         weed2.push({
@@ -840,12 +865,18 @@
   }
 
   function drawDuckweed() {
-    for (var i = 0; i < weed2.length; i++) {
-      var p = weed2[i];
-      ctx.globalAlpha = 0.8;
-      ctx.fillStyle = p.tone > 0.7 ? C.padRim : C.pad;
+    /* Two fills for the whole mat instead of one per leaf. At ~200 leaves
+       this was the single largest source of draw calls on the page. */
+    ctx.globalAlpha = 0.8;
+    for (var pass = 0; pass < 2; pass++) {
+      ctx.fillStyle = pass ? C.padRim : C.pad;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, p.rot, 0, TAU);
+      for (var i = 0; i < weed2.length; i++) {
+        var p = weed2[i];
+        if ((p.tone > 0.7) !== !!pass) continue;
+        ctx.moveTo(p.x + p.r, p.y);
+        ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, p.rot, 0, TAU);
+      }
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -1280,8 +1311,7 @@
     var band = 4 + rp.r * 0.16;
 
     crest(g, rp, k, Math.max(1, rp.r - band * 0.95), 0.17 * ws, band * 1.15, C.deep);
-    crest(g, rp, k, rp.r + band * 0.30,              0.10 * ws, band * 1.30, C.light);
-    crest(g, rp, k, rp.r,                            0.21 * ws, band * 0.85, C.light);
+    crest(g, rp, k, rp.r,                            0.26 * ws, band * 1.5,  C.light);
   }
 
   /* ---- wavefronts --------------------------------------------------------
@@ -1607,9 +1637,10 @@
 
   function resize() {
     // Fixed to the viewport, so that's what we size to — not the document.
-    // A soft, out-of-focus backdrop does not need full retina; this alone
-    // is a ~40% cut in every fill on the page.
-    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    /* A soft, out-of-focus backdrop does not need full retina. Every fill
+       and the per-frame clear both scale with this, so it is the single
+       biggest lever on the page. */
+    dpr = Math.min(window.devicePixelRatio || 1, 1.35);
     W = Math.max(1, window.innerWidth || 1200);
     H = Math.max(1, window.innerHeight || 800);
 
