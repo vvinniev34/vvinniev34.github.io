@@ -382,7 +382,17 @@
     ctx.fillStyle = f.pal.body;
     ctx.fill();
 
-    // Patches, clipped to the body so they read as markings.
+    /* Markings are clipped to the body so they read as patches rather than
+       blobs — but clipping is expensive and at ~40px a koi's markings are
+       a couple of pixels, so the smallest fish skip it entirely. */
+    if (f.girth < 5.5) {
+      ctx.globalAlpha = 0.8 * fade;
+      ctx.fillStyle = f.pal.patch;
+      var sp = f.spine[4];
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, f.girth * 0.5, f.girth * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
     ctx.save();
     fishPath(f);
     ctx.clip();
@@ -397,6 +407,7 @@
       ctx.fill();
     }
     ctx.restore();
+    }
 
     // Eyes. Small, but they're most of what makes a blob read as a fish.
     var e = f.spine[2], ep = f.spine[1], en = f.spine[3];
@@ -417,7 +428,6 @@
 
   /* ---- water -------------------------------------------------------------- */
 
-  var baseGrad = null, vignette = null;   // rebuilt on resize / theme change
 
   /* ---- caustics ------------------------------------------------------------
      The bright shifting web on the bottom of a pond. Interfering sine waves
@@ -431,8 +441,8 @@
   var cCv = null, cCtx = null, cImg = null, CW = 0, CH = 0;
 
   function initCaustics() {
-    CW = Math.max(48, Math.min(200, Math.round(W / 9)));
-    CH = Math.max(32, Math.min(140, Math.round(H / 9)));
+    CW = Math.max(40, Math.min(150, Math.round(W / 12)));
+    CH = Math.max(28, Math.min(105, Math.round(H / 12)));
     cCv = document.createElement("canvas");
     cCv.width = CW;
     cCv.height = CH;
@@ -468,61 +478,6 @@
       }
     }
 
-    /* Now fold the ripples into the same field.
-
-       A ripple IS a deformation of the surface, and the caustic web is
-       light bent through that surface — so a ring belongs in this buffer,
-       not stroked on top of it. Drawing them as separate layers is why the
-       shifting colours appeared indifferent to the rings, and why the
-       colours kept visually burying them.
-
-       Only the annulus of each ring is touched, in buffer space, so this
-       costs a few thousand pixels rather than a full re-render. */
-    var scale = CW / W;
-    var touched = 0;
-    for (var ri = 0; ri < ripples.length && touched < 7; ri++) {
-      var rp = ripples[ri];
-      if (rp.delay > 0 || rp.r < 8) continue;
-      var kk = Math.min(1, rp.life / RIPPLE_LIFE);
-      var str = Math.pow(1 - kk, 1.15) * rp.weight;
-      if (str < 0.05) continue;
-      touched++;
-
-      var cxb = rp.x * scale, cyb = rp.y * scale;
-      var rb = rp.r * scale;
-      var bandb = (30 + rp.r * 0.22) * scale;
-
-      var x0 = Math.max(0, Math.floor(cxb - rb - bandb));
-      var x1 = Math.min(CW - 1, Math.ceil(cxb + rb + bandb));
-      var y0 = Math.max(0, Math.floor(cyb - rb - bandb));
-      var y1 = Math.min(CH - 1, Math.ceil(cyb + rb + bandb));
-
-      for (var by = y0; by <= y1; by++) {
-        var ddy = by - cyb;
-        for (var bx = x0; bx <= x1; bx++) {
-          var ddx = bx - cxb;
-          var dist = Math.sqrt(ddx * ddx + ddy * ddy);
-
-          var rHere = rb;
-          if (rp.def) {                       // dented rings bend the light too
-            var ang = Math.atan2(ddy, ddx);
-            var fi = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
-            var i0 = Math.floor(fi) % RN;
-            rHere += rp.def[i0] * scale;
-          }
-
-          var off = dist - rHere;
-          if (off < -bandb || off > bandb) continue;
-
-          // one full wave across the band: bright crest, dark trough
-          var mod = Math.cos((off / bandb) * Math.PI) * str * 235;
-          var at = (by * CW + bx) * 4 + 3;
-          var nv = d[at] + mod;
-          d[at] = nv < 0 ? 0 : (nv > 255 ? 255 : nv);
-        }
-      }
-    }
-
     cCtx.putImageData(cImg, 0, 0);
   }
 
@@ -531,17 +486,23 @@
      Generated once per resize.
      -------------------------------------------------------------------------- */
 
-  var siltCv = null;
+  var bgCv = null;
 
-  function initFloor() {
-    /* Silt and stones never move, so they're baked once into a single texture
-       rather than re-drawn every frame — around 150 fills a frame saved.
-       Baked at CSS resolution, so slightly soft when upscaled on a retina
-       display, which is roughly what a pond bottom looks like anyway. */
-    siltCv = document.createElement("canvas");
-    siltCv.width = Math.max(64, W);
-    siltCv.height = Math.max(48, H);
-    var g = siltCv.getContext("2d");
+  function initBackdrop() {
+    /* Everything that never changes — the water gradient, the silt, the
+       stones, the corner vignette — is baked into one image at resize.
+       These were three separate full-canvas operations every frame. */
+    bgCv = document.createElement("canvas");
+    bgCv.width = Math.max(64, W);
+    bgCv.height = Math.max(48, H);
+    var g = bgCv.getContext("2d");
+
+    var base = g.createRadialGradient(W * 0.45, H * 0.42, Math.min(W, H) * 0.05,
+                                      W * 0.45, H * 0.42, Math.max(W, H) * 0.78);
+    base.addColorStop(0, C.pond);
+    base.addColorStop(1, C.deep);
+    g.fillStyle = base;
+    g.fillRect(0, 0, W, H);
 
     for (var i = 0; i < 130; i++) {
       var x = Math.random() * W, y = Math.random() * H;
@@ -558,28 +519,31 @@
       g.save();
       g.translate(st.x, st.y);
       g.rotate(st.rot);
-
       g.beginPath();
       g.ellipse(st.r * 0.18, st.r * 0.22, st.r * 1.08, st.r * st.squash * 1.08, 0, 0, Math.PI * 2);
       g.globalAlpha = 0.18;
       g.fillStyle = "#03120d";
       g.fill();
-
       g.beginPath();
       g.ellipse(0, 0, st.r, st.r * st.squash, 0, 0, Math.PI * 2);
       g.globalAlpha = 0.62 + st.tone * 0.24;
       g.fillStyle = st.tone > 0.62 ? C.stoneLit : C.stone;
       g.fill();
-
-      // catchlight on the upper edge, so they read as rounded not as discs
       g.beginPath();
       g.ellipse(-st.r * 0.24, -st.r * 0.28, st.r * 0.5, st.r * st.squash * 0.38, 0, 0, Math.PI * 2);
       g.globalAlpha = 0.3;
       g.fillStyle = C.stoneLit;
       g.fill();
-
       g.restore();
     }
+
+    var vg = g.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.3,
+                                    W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+    vg.addColorStop(0, "transparent");
+    vg.addColorStop(1, "rgba(0,26,20,0.2)");
+    g.globalAlpha = 1;
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
   }
 
   /* ---- the bottom ----------------------------------------------------------
@@ -619,11 +583,14 @@
           bend: 0.25 + Math.random() * 0.5,
         });
       }
+      var reach = 0;
+      for (var bb = 0; bb < blades.length; bb++) reach = Math.max(reach, blades[bb].len);
       weeds.push({
         x: Math.random() * W,
         y: Math.random() * H,
         phase: Math.random() * Math.PI * 2,
         kick: 0,
+        reach: reach,
         blades: blades,
       });
     }
@@ -634,6 +601,12 @@
       var cl = weeds[i];
       waveForce(cl.x, cl.y, _wf, true);
       cl.kick += ((_wf[0] + _wf[1]) * 0.7 - cl.kick) * 0.16;
+
+      /* One gradient for the whole clump rather than one per blade — this
+         was allocating ~100 gradient objects every frame. */
+      var clumpFill = ctx.createLinearGradient(cl.x, cl.y, cl.x, cl.y - cl.reach);
+      clumpFill.addColorStop(0, C.weed);
+      clumpFill.addColorStop(1, C.weedTip);
       for (var b = 0; b < cl.blades.length; b++) {
         var bl = cl.blades[b];
         // every blade in a clump leans with the same slow current…
@@ -658,11 +631,8 @@
                              cl.x - nx * hw, cl.y - ny * hw);
         ctx.closePath();
 
-        var g = ctx.createLinearGradient(cl.x, cl.y, tipx, tipy);
-        g.addColorStop(0, C.weed);
-        g.addColorStop(1, C.weedTip);
         ctx.globalAlpha = 0.88;
-        ctx.fillStyle = g;
+        ctx.fillStyle = clumpFill;
         ctx.fill();
       }
     }
@@ -674,72 +644,112 @@
      the shifting colours slide along underneath the rings, completely
      indifferent to them. `x0..h` bounds the fill so the per-ripple redraws
      only touch the ring, not the whole canvas. */
-  function sheenBands(x0, y0, w, h) {
-    for (var sgi = 0; sgi < 2; sgi++) {
-      var ang = 0.5 + sgi * 0.35;
-      var off = ((t * (0.035 + sgi * 0.02) + sgi * 0.5) % 1.6) - 0.3;
-      var sx = W * off, sy = H * (off * 0.4);
-      var sg = ctx.createLinearGradient(sx, sy,
-                                        sx + Math.cos(ang) * W * 0.55,
-                                        sy + Math.sin(ang) * H * 0.9);
+  /* ---- the animated light layer -----------------------------------------
+     Caustics, the swell thrown off by each ripple, and the drifting sheen
+     bands all used to be composited straight onto the main canvas: five
+     full-canvas operations a frame, ~33M pixel writes at retina. They are
+     all soft, low-frequency light, so they are now rendered into a buffer
+     at a third of the resolution and blitted up once — a ninth of the fill
+     cost, and one composite instead of five.
+     -------------------------------------------------------------------------- */
+
+  var lightCv = null, lightCtx = null, LW = 0, LH = 0;
+
+  function initLight() {
+    LW = Math.max(64, Math.round(W / 3));
+    LH = Math.max(48, Math.round(H / 3));
+    lightCv = document.createElement("canvas");
+    lightCv.width = LW;
+    lightCv.height = LH;
+    lightCtx = lightCv.getContext("2d");
+  }
+
+  function sheenBands(g, sc) {
+    for (var i = 0; i < 2; i++) {
+      var ang = 0.5 + i * 0.35;
+      var off = ((t * (0.035 + i * 0.02) + i * 0.5) % 1.6) - 0.3;
+      var sx = LW * off, sy = LH * (off * 0.4);
+      var sg = g.createLinearGradient(sx, sy,
+                                      sx + Math.cos(ang) * LW * 0.55,
+                                      sy + Math.sin(ang) * LH * 0.9);
       sg.addColorStop(0, "transparent");
       sg.addColorStop(0.5, C.light);
       sg.addColorStop(1, "transparent");
-      ctx.globalAlpha = 0.16;
-      ctx.fillStyle = sg;
-      ctx.fillRect(x0, y0, w, h);
+      g.globalAlpha = 0.16;
+      g.fillStyle = sg;
+      g.fillRect(0, 0, LW, LH);
     }
   }
 
-  function drawWater() {
-    if (!baseGrad) {
-      baseGrad = ctx.createRadialGradient(W * 0.45, H * 0.42, Math.min(W, H) * 0.05,
-                                          W * 0.45, H * 0.42, Math.max(W, H) * 0.78);
-      baseGrad.addColorStop(0, C.pond);
-      baseGrad.addColorStop(1, C.deep);
-    }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = baseGrad;
-    ctx.fillRect(0, 0, W, H);
-
-    if (siltCv) {
-      ctx.globalAlpha = 0.85;
-      ctx.drawImage(siltCv, 0, 0, W, H);
-    }
-
-    drawWeeds();
+  function drawLight() {
+    var g = lightCtx;
+    if (!g) return;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, LW, LH);
+    g.imageSmoothingEnabled = true;
 
     if (cCv) {
       renderCaustics();
-      ctx.imageSmoothingEnabled = true;
-      if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(cCv, 0, 0, W, H);
-
-      /* A second pass, mirrored as well as offset and rescaled. Offsetting
-         alone left the same web visibly repeated; flipping it breaks the
-         correlation so the two layers interfere instead. */
-      ctx.save();
-      ctx.translate(W, 0);
-      ctx.scale(-1, 1);
-      ctx.globalAlpha = 0.34;
-      ctx.drawImage(cCv, -W * 0.13, -H * 0.17, W * 1.37, H * 1.41);
-      ctx.restore();
+      g.globalAlpha = 0.5;
+      g.drawImage(cCv, 0, 0, LW, LH);
+      // mirrored as well as offset, so the two layers interfere rather than
+      // showing the same web twice
+      g.save();
+      g.translate(LW, 0);
+      g.scale(-1, 1);
+      g.globalAlpha = 0.34;
+      g.drawImage(cCv, -LW * 0.13, -LH * 0.17, LW * 1.37, LH * 1.41);
+      g.restore();
     }
 
-    sheenBands(0, 0, W, H);
+    /* Surface swell: each ring pushes a broad band of light through the
+       water. This is what makes the pond's shifting colour respond to a
+       ripple rather than slide past it. */
+    var sc = LW / W, swells = 0;
+    for (var wi = 0; wi < ripples.length && swells < 8; wi++) {
+      var rw = ripples[wi];
+      if (rw.delay > 0 || rw.r < 6) continue;
+      var wk = Math.min(1, rw.life / RIPPLE_LIFE);
+      var ws = Math.pow(1 - wk, 1.1) * rw.weight;
+      if (ws < 0.05) continue;
+      swells++;
 
-    // Depth at the corners.
-    if (!vignette) {
-      vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.3,
-                                          W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
-      vignette.addColorStop(0, "transparent");
-      vignette.addColorStop(1, "rgba(0,26,20,0.2)");
+      var cx = rw.x * sc, cy = rw.y * sc, rr = rw.r * sc;
+      var band = (26 + rw.r * 0.42) * sc;
+      var inner = Math.max(0, rr - band), outer = rr + band;
+
+      var gs = g.createRadialGradient(cx, cy, inner, cx, cy, outer);
+      gs.addColorStop(0, "transparent");
+      gs.addColorStop(0.45, C.light);
+      gs.addColorStop(1, "transparent");
+      g.globalAlpha = 0.5 * ws;
+      g.fillStyle = gs;
+      g.fillRect(cx - outer, cy - outer, outer * 2, outer * 2);
+
+      var ti = Math.max(0, rr - band * 1.9), to = Math.max(1, rr - band * 0.15);
+      var gd = g.createRadialGradient(cx, cy, ti, cx, cy, to);
+      gd.addColorStop(0, "transparent");
+      gd.addColorStop(0.6, C.deep);
+      gd.addColorStop(1, "transparent");
+      g.globalAlpha = 0.38 * ws;
+      g.fillStyle = gd;
+      g.fillRect(cx - to, cy - to, to * 2, to * 2);
+    }
+
+    sheenBands(g, sc);
+    g.globalAlpha = 1;
+  }
+
+  function drawWater() {
+    ctx.globalAlpha = 1;
+    if (bgCv) ctx.drawImage(bgCv, 0, 0, W, H);   // static: gradient, silt, stones, vignette
+    drawWeeds();
+    drawLight();
+    if (lightCv) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(lightCv, 0, 0, W, H);        // one composite for all the light
     }
     ctx.globalAlpha = 1;
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, W, H);
   }
 
   /* ---- lily pads ------------------------------------------------------------
@@ -1086,7 +1096,7 @@
 
       function ring(radius, alpha, width, colour) {
         // Scale detail with size; the cursor wake spawns a lot of small ones.
-        var steps = Math.max(10, Math.min(44, Math.round(radius / 4)));
+        var steps = Math.max(9, Math.min(30, Math.round(radius / 6)));
         ctx.strokeStyle = colour;
         ctx.lineWidth = width;
 
@@ -1133,10 +1143,12 @@
       /* Trough behind, crest in front. The pair is what makes a ring read as
          a raised ridge of water; a single pale line disappears into the
          caustics and is erased entirely by the panels' backdrop blur. */
-      var lw = (3.4 * rp.weight + 0.8) * (1 - k * 0.4);
-      ring(rp.r * 1.03, a * 0.75, lw * 0.9, C.waveDark);
-      ring(rp.r, a, lw, C.wave);
-      if (rp.r > 34) ring(rp.r * 0.86, a * 0.4, lw * 0.5, C.waveDark);
+      /* A single crisp crest with a soft shadow just outside it. The swell
+         above already carries the mass of the wave, so the stroke only has
+         to draw the edge — three heavy strokes fought with it. */
+      var lw = (1.9 * rp.weight + 0.5) * (1 - k * 0.35);
+      ring(rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
+      ring(rp.r, a * 0.92, lw, C.wave);
     });
 
     bursts.forEach(function (bu) {
@@ -1213,7 +1225,7 @@
          and out-disturbed an actual splash, which defeats the point. */
       wakeCool -= dt;
       var stride = 24 + mouse.vel * 64;
-      if (wakeTravel > stride && wakeCool <= 0 && ripples.length < 46) {
+      if (wakeTravel > stride && wakeCool <= 0 && ripples.length < 30) {
         wakeTravel = 0;
         wakeCool = 0.07;
         addRipple(mouse.x, mouse.y,
@@ -1316,17 +1328,18 @@
 
   function resize() {
     // Fixed to the viewport, so that's what we size to — not the document.
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // A soft, out-of-focus backdrop does not need full retina; this alone
+    // is a ~40% cut in every fill on the page.
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     W = Math.max(1, window.innerWidth || 1200);
     H = Math.max(1, window.innerHeight || 800);
     cv.width = W * dpr;
     cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    baseGrad = null;
-    vignette = null;
     initCaustics();
+    initLight();
     makeBottom();
-    initFloor();
+    initBackdrop();
     makePads();
     padBuoyancy();
     stock();
@@ -1425,10 +1438,8 @@
 
   new MutationObserver(function () {
     readColors();
-    baseGrad = null;
-    vignette = null;
     initCaustics();
-    initFloor();          // stones are baked in, so they need restyling too
+    initBackdrop();       // stones and water tone are baked in
     var pals = palettes();
     fish.forEach(function (f, i) { f.pal = pals[i % pals.length]; });
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
