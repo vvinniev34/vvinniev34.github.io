@@ -811,14 +811,18 @@
   }
 
   function dimple(b) {
-    addRipple(b.x, b.y, 14 + Math.random() * 20, 0,
-              0.1 + Math.random() * 0.1, 0.12);
+    /* Nudged up so a dart actually registers, but deliberately still the
+       faintest thing on the water — a strider weighs nothing. Roughly a
+       fifth the strength of a koi breaking the surface and a sixth the
+       size of one, so it reads as an insect rather than an event. */
+    addRipple(b.x, b.y, 20 + Math.random() * 26, 0,
+              0.18 + Math.random() * 0.14, 0.12);
   }
 
   function drawBugs() {
-    ctx.globalAlpha = 0.28;
+    ctx.globalAlpha = 0.34;
     ctx.strokeStyle = C.light;
-    ctx.lineWidth = 1.1;
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     for (var w = 0; w < bugs.length; w++) {
       var tr = bugs[w].trail;
