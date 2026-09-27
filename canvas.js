@@ -1067,9 +1067,14 @@
          elastic. Softer and far less damped now: it drifts back over a
          couple of seconds, overshooting and settling, the way something
          buoyant actually does. */
-      var give = p.buoy * 4.2;
-      p.vx += _wf[0] * give - p.ox * 0.018;
-      p.vy += _wf[1] * give - p.oy * 0.018;
+      /* Coupling was 4.2, which meant a pad did not get nudged by a
+         passing wave — it got towed by it, riding the wavefront over
+         150px out before the spring could do anything. What looked like
+         "not drifting back" was really "dragged much too far first".
+         A nudge now, with a spring soft enough to take its time. */
+      var give = p.buoy * 1.3;
+      p.vx += _wf[0] * give - p.ox * 0.03;
+      p.vy += _wf[1] * give - p.oy * 0.03;
       p.vx *= 0.955; p.vy *= 0.955;
       p.ox += p.vx; p.oy += p.vy;
       p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.05;
@@ -1332,10 +1337,10 @@
     addRipple(x, y, 230, 0, 1.35, 1);
 
     /* Foam torn off the rim, and droplets flung out of it. */
-    sprayBurst(x, y, 13, { speed: 1.1, r: 3.4, squash: 0.65,
-                           life: 0.4, offset: 16 });
-    sprayBurst(x, y, 24, { speed: 2.3, r: 1.9, squash: 1,
-                           life: 0.42, ring: true });
+    sprayBurst(x, y, 13, { speed: 1.8, r: 3.4, squash: 0.65,
+                           life: 0.44, offset: 22 });
+    sprayBurst(x, y, 24, { speed: 4.2, r: 1.9, squash: 1,
+                           life: 0.6, ring: true });
 
     /* The rebound — water driven back up the middle falls in again a beat
        later. It is just the same two primitives with a delay on them; no
