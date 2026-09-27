@@ -19,13 +19,32 @@
 
   // The pond is a fixed, full-viewport backdrop: it stays put while the page
   // scrolls over it, so the fish are visible the whole way down.
-  var cv = document.createElement("canvas");
-  cv.className = "pond";
-  cv.setAttribute("aria-hidden", "true");
-  document.body.insertBefore(cv, document.body.firstChild);
+  /* Three stacked canvases, so nothing is composited that hasn't changed.
 
-  var ctx = cv.getContext("2d");
-  if (!ctx) return;
+       bg     the pond floor. Painted once at resize, never touched again.
+       light  the surface: caustics, sheen, the swell and crest of every
+              ripple. Half resolution, stretched by CSS — the GPU does the
+              upscale for free.
+       fg     everything with a hard edge: weeds, koi, spray, pads.
+
+     Previously all of this was one canvas doing seven full-canvas fills a
+     frame; the two remaining blits are gone entirely now. */
+  function layer(name) {
+    var c = document.createElement("canvas");
+    c.className = "pond pond--" + name;
+    c.setAttribute("aria-hidden", "true");
+    document.body.insertBefore(c, document.body.firstChild);
+    return c;
+  }
+  var fgCv = layer("fg"), lightCv = layer("light"), bgCv = layer("bg");
+
+  var ctx = fgCv.getContext("2d");
+  var bgCtx = bgCv.getContext("2d");
+  var lightCtx = lightCv.getContext("2d");
+  if (!ctx || !bgCtx || !lightCtx) return;
+
+  var LIGHT_SCALE = 0.5;
+  var cv = fgCv;                      // pointer position is read off this one
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -486,16 +505,13 @@
      Generated once per resize.
      -------------------------------------------------------------------------- */
 
-  var bgCv = null;
-
   function initBackdrop() {
     /* Everything that never changes — the water gradient, the silt, the
        stones, the corner vignette — is baked into one image at resize.
        These were three separate full-canvas operations every frame. */
-    bgCv = document.createElement("canvas");
-    bgCv.width = Math.max(64, W);
-    bgCv.height = Math.max(48, H);
-    var g = bgCv.getContext("2d");
+    var g = bgCtx;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
 
     var base = g.createRadialGradient(W * 0.45, H * 0.42, Math.min(W, H) * 0.05,
                                       W * 0.45, H * 0.42, Math.max(W, H) * 0.78);
@@ -653,59 +669,58 @@
      cost, and one composite instead of five.
      -------------------------------------------------------------------------- */
 
-  var lightCv = null, lightCtx = null, LW = 0, LH = 0;
+  var LW = 0, LH = 0;
 
   function initLight() {
-    LW = Math.max(64, Math.round(W / 3));
-    LH = Math.max(48, Math.round(H / 3));
-    lightCv = document.createElement("canvas");
+    LW = Math.max(64, Math.round(W * LIGHT_SCALE));
+    LH = Math.max(48, Math.round(H * LIGHT_SCALE));
     lightCv.width = LW;
     lightCv.height = LH;
-    lightCtx = lightCv.getContext("2d");
+    // Draw in page coordinates; the transform handles the downscale.
+    lightCtx.setTransform(LW / W, 0, 0, LH / H, 0, 0);
   }
 
-  function sheenBands(g, sc) {
+  function sheenBands(g) {
     for (var i = 0; i < 2; i++) {
       var ang = 0.5 + i * 0.35;
       var off = ((t * (0.035 + i * 0.02) + i * 0.5) % 1.6) - 0.3;
-      var sx = LW * off, sy = LH * (off * 0.4);
+      var sx = W * off, sy = H * (off * 0.4);
       var sg = g.createLinearGradient(sx, sy,
-                                      sx + Math.cos(ang) * LW * 0.55,
-                                      sy + Math.sin(ang) * LH * 0.9);
+                                      sx + Math.cos(ang) * W * 0.55,
+                                      sy + Math.sin(ang) * H * 0.9);
       sg.addColorStop(0, "transparent");
       sg.addColorStop(0.5, C.light);
       sg.addColorStop(1, "transparent");
       g.globalAlpha = 0.16;
       g.fillStyle = sg;
-      g.fillRect(0, 0, LW, LH);
+      g.fillRect(0, 0, W, H);
     }
   }
 
   function drawLight() {
     var g = lightCtx;
     if (!g) return;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, LW, LH);
+    g.clearRect(0, 0, W, H);
     g.imageSmoothingEnabled = true;
 
     if (cCv) {
       renderCaustics();
       g.globalAlpha = 0.5;
-      g.drawImage(cCv, 0, 0, LW, LH);
+      g.drawImage(cCv, 0, 0, W, H);
       // mirrored as well as offset, so the two layers interfere rather than
       // showing the same web twice
       g.save();
-      g.translate(LW, 0);
+      g.translate(W, 0);
       g.scale(-1, 1);
       g.globalAlpha = 0.34;
-      g.drawImage(cCv, -LW * 0.13, -LH * 0.17, LW * 1.37, LH * 1.41);
+      g.drawImage(cCv, -W * 0.13, -H * 0.17, W * 1.37, H * 1.41);
       g.restore();
     }
 
     /* Surface swell: each ring pushes a broad band of light through the
        water. This is what makes the pond's shifting colour respond to a
        ripple rather than slide past it. */
-    var sc = LW / W, swells = 0;
+    var swells = 0;
     for (var wi = 0; wi < ripples.length && swells < 8; wi++) {
       var rw = ripples[wi];
       if (rw.delay > 0 || rw.r < 6) continue;
@@ -714,8 +729,8 @@
       if (ws < 0.05) continue;
       swells++;
 
-      var cx = rw.x * sc, cy = rw.y * sc, rr = rw.r * sc;
-      var band = (26 + rw.r * 0.42) * sc;
+      var cx = rw.x, cy = rw.y, rr = rw.r;
+      var band = 26 + rw.r * 0.42;
       var inner = Math.max(0, rr - band), outer = rr + band;
 
       var gs = g.createRadialGradient(cx, cy, inner, cx, cy, outer);
@@ -736,20 +751,20 @@
       g.fillRect(cx - to, cy - to, to * 2, to * 2);
     }
 
-    sheenBands(g, sc);
+    // Ripple crests belong here too: the caustic web IS the surface, so a
+    // wavefront is a feature of the same layer rather than a line floating
+    // over it. Everything that disturbs the surface now disturbs one thing.
+    drawRings(g);
+
+    sheenBands(g);
     g.globalAlpha = 1;
   }
 
   function drawWater() {
-    ctx.globalAlpha = 1;
-    if (bgCv) ctx.drawImage(bgCv, 0, 0, W, H);   // static: gradient, silt, stones, vignette
-    drawWeeds();
+    // The floor is its own canvas and never repaints; the light is its own
+    // canvas and paints itself. Nothing to composite here any more.
     drawLight();
-    if (lightCv) {
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(lightCv, 0, 0, W, H);        // one composite for all the light
-    }
-    ctx.globalAlpha = 1;
+    drawWeeds();
   }
 
   /* ---- lily pads ------------------------------------------------------------
@@ -1059,8 +1074,9 @@
     }
   }
 
-  function drawRipples() {
-    ctx.lineCap = "round";
+  /* Wavefronts, drawn into the surface-light layer. */
+  function drawRings(g) {
+    g.lineCap = "round";
     ripples.forEach(function (rp) {
       if (rp.delay > 0) return;
       var k = Math.min(1, rp.life / RIPPLE_LIFE);
@@ -1097,21 +1113,21 @@
       function ring(radius, alpha, width, colour) {
         // Scale detail with size; the cursor wake spawns a lot of small ones.
         var steps = Math.max(9, Math.min(30, Math.round(radius / 6)));
-        ctx.strokeStyle = colour;
-        ctx.lineWidth = width;
+        g.strokeStyle = colour;
+        g.lineWidth = width;
 
         // Untouched ring: one closed path, as before.
         if (!rp.def) {
-          ctx.beginPath();
+          g.beginPath();
           for (var si = 0; si <= steps; si++) {
             var ang = (si / steps) * Math.PI * 2;
             var rr = sampleR(ang, radius);
             var px = rp.x + Math.cos(ang) * rr, py = rp.y + Math.sin(ang) * rr;
-            if (si === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            if (si === 0) g.moveTo(px, py); else g.lineTo(px, py);
           }
-          ctx.closePath();
-          ctx.globalAlpha = alpha;
-          ctx.stroke();
+          g.closePath();
+          g.globalAlpha = alpha;
+          g.stroke();
           return;
         }
 
@@ -1123,21 +1139,21 @@
           var a2 = (sj / steps) * Math.PI * 2;
           var c = cutAt(a2);
           if (c > 0.6) {                        // severed here
-            if (open) { ctx.stroke(); open = false; }
+            if (open) { g.stroke(); open = false; }
             continue;
           }
           var r2 = sampleR(a2, radius);
           var qx = rp.x + Math.cos(a2) * r2, qy = rp.y + Math.sin(a2) * r2;
           if (!open) {
-            ctx.beginPath();
-            ctx.globalAlpha = alpha * (1 - c);
-            ctx.moveTo(qx, qy);
+            g.beginPath();
+            g.globalAlpha = alpha * (1 - c);
+            g.moveTo(qx, qy);
             open = true;
           } else {
-            ctx.lineTo(qx, qy);
+            g.lineTo(qx, qy);
           }
         }
-        if (open) ctx.stroke();
+        if (open) g.stroke();
       }
 
       /* Trough behind, crest in front. The pair is what makes a ring read as
@@ -1151,6 +1167,11 @@
       ring(rp.r, a * 0.92, lw, C.wave);
     });
 
+    g.globalAlpha = 1;
+  }
+
+  function drawRipples() {
+    ctx.lineCap = "round";
     bursts.forEach(function (bu) {
       var k = bu.age / bu.life;
       var r = bu.r * (0.35 + k * 1.9);
@@ -1259,6 +1280,7 @@
   }
 
   function draw() {
+    ctx.clearRect(0, 0, W, H);
     drawWater();
     drawWakes();
     fish.forEach(drawFish);
@@ -1333,8 +1355,9 @@
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     W = Math.max(1, window.innerWidth || 1200);
     H = Math.max(1, window.innerHeight || 800);
-    cv.width = W * dpr;
-    cv.height = H * dpr;
+
+    fgCv.width = W * dpr;  fgCv.height = H * dpr;
+    bgCv.width = W * dpr;  bgCv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     initCaustics();
     initLight();

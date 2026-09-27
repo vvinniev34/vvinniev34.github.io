@@ -236,6 +236,11 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   pointer-events: none;
 }
 
+/* The surface-light layer renders at half resolution and is stretched by
+   the compositor, which costs nothing, instead of being upscaled with a
+   full-canvas drawImage every frame. */
+.pond--light { image-rendering: auto; }
+
 /* Both halves are frosted panels floating on the pond. The previous
    treatment was a soft amorphous wash behind the text, which lined up with
    nothing and read as an accident rather than a decision. Glass lets the koi
