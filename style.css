@@ -38,8 +38,9 @@ html[data-theme="light"] {
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
-  --frog:       #5f8f52;   /* frogs on the lily pads */
-  --frog-dark:  #3c6236;
+  --duck:       #8c7f6d;   /* a duck, now and then */
+  --duck-head:  #3f5145;
+  --duck-bill:  #c2a04e;
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
 }
@@ -67,8 +68,9 @@ html[data-theme="dark"] {
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
-  --frog:       #2e5c3c;   /* frogs on the lily pads */
-  --frog-dark:  #17351f;
+  --duck:       #4a4238;   /* a duck, now and then */
+  --duck-head:  #1f3328;
+  --duck-bill:  #8a7132;
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;
 }

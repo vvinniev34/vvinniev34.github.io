@@ -84,8 +84,9 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
-    C.frog      = v("--frog", "#5f8f52");
-    C.frogDark  = v("--frog-dark", "#3c6236");
+    C.duck      = v("--duck", "#8c7f6d");
+    C.duckHead  = v("--duck-head", "#3f5145");
+    C.duckBill  = v("--duck-bill", "#c2a04e");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
     C.weed      = v("--weed", "#4c7a58");
@@ -204,7 +205,7 @@
     if (f.rise > 0) {
       f.rise -= dt;
       if (f.rise <= 0) f.rise = 0;
-    } else if (Math.random() < 0.022 * dt) {
+    } else if (Math.random() < 0.03 * dt) {
       f.rise = 1.1 + Math.random() * 0.9;
       addRipple(f.spine[0].x, f.spine[0].y,
                 26 + f.girth * 5, 0,
@@ -686,166 +687,169 @@
 
   var pads = [];
 
-  /* ---- frogs -------------------------------------------------------------
-     A frog sits on a lily pad for a long while, then hops to another one.
-     Deliberately the opposite of the insects this replaces: almost always
-     still, and when it does move it is one slow readable arc rather than a
-     fast jitter. The landing is a proper ripple with an obvious cause.
-
-     While resting it rides its pad, so it rocks when a wave goes past.
+  /* ---- a duck ------------------------------------------------------------
+     Crosses the pond now and then. Slow and large enough to actually
+     follow, which is what the insects were not. It drags a continuous V of
+     wake behind it, pauses to dabble, and the koi get out from under it.
+     Offscreen most of the time — it is an event, not scenery.
      -------------------------------------------------------------------------- */
 
-  var frogs = [];
+  var duck = null;
 
-  function makeFrogs() {
-    frogs = [];
-    if (pads.length < 2) return;
-    var n = Math.max(1, Math.min(3, Math.floor(pads.length / 4)));
-    var used = {};
-    for (var i = 0; i < n; i++) {
-      var pi = (Math.random() * pads.length) | 0;
-      if (used[pi]) { pi = (pi + 1) % pads.length; }
-      used[pi] = 1;
-      frogs.push({
-        pad: pi,
-        x: pads[pi].x, y: pads[pi].y,
-        a: Math.random() * TAU,
-        state: "rest",
-        wait: 3 + Math.random() * 9,
-        u: 0, dur: 0,
-        fx: 0, fy: 0, tx: 0, ty: 0,
-        size: 0.85 + Math.random() * 0.35,
-      });
-    }
+  function launchDuck() {
+    var edge = (Math.random() * 4) | 0;
+    var m = 90;
+    var x, y, a;
+    if (edge === 0)      { x = -m;     y = Math.random() * H; a = 0; }
+    else if (edge === 1) { x = W + m;  y = Math.random() * H; a = Math.PI; }
+    else if (edge === 2) { x = Math.random() * W; y = -m;     a = Math.PI / 2; }
+    else                 { x = Math.random() * W; y = H + m;  a = -Math.PI / 2; }
+
+    duck = {
+      x: x, y: y,
+      a: a + (Math.random() - 0.5) * 0.7,
+      v: 0.95 + Math.random() * 0.45,
+      wake: 0,
+      dabble: 5 + Math.random() * 9,
+      dip: 0,
+      size: 1,
+      wander: 0,
+    };
   }
 
-  function updateFrogs(dt) {
-    for (var i = 0; i < frogs.length; i++) {
-      var f = frogs[i];
+  var nextDuck = 10 + Math.random() * 25;
 
-      if (f.state === "rest") {
-        var pad = pads[f.pad];
-        if (pad) {                       // ride the pad, rocking and all
-          f.x = pad.x + pad.ox + Math.sin(t * 0.11 + pad.phase) * 6;
-          f.y = pad.y + pad.oy + Math.sin(t * 0.5 + pad.phase) * 1.8;
+  function updateDuck(dt) {
+    if (!duck) {
+      nextDuck -= dt;
+      if (nextDuck <= 0) { nextDuck = 55 + Math.random() * 85; launchDuck(); }
+      return;
+    }
+
+    if (duck.dip > 0) {
+      duck.dip -= dt;                    // head down, barely moving
+      duck.x += Math.cos(duck.a) * duck.v * 0.15;
+      duck.y += Math.sin(duck.a) * duck.v * 0.15;
+    } else {
+      duck.wander += (Math.random() - 0.5) * 0.5 * dt;
+      duck.wander *= 0.96;
+      duck.a += duck.wander * dt;
+
+      // give the cursor a wide berth
+      var dx = duck.x - mouse.x, dy = duck.y - mouse.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      if (mouse.on && d < 200) {
+        var away = Math.atan2(dy, dx);
+        duck.a += Math.atan2(Math.sin(away - duck.a), Math.cos(away - duck.a)) * 1.5 * dt;
+      }
+
+      duck.x += Math.cos(duck.a) * duck.v;
+      duck.y += Math.sin(duck.a) * duck.v;
+
+      duck.dabble -= dt;
+      if (duck.dabble <= 0) {
+        duck.dabble = 7 + Math.random() * 12;
+        duck.dip = 1.1 + Math.random() * 1.2;
+        addRipple(duck.x + Math.cos(duck.a) * 14, duck.y + Math.sin(duck.a) * 14,
+                  56 + Math.random() * 30, 0, 0.5, 0.7);
+        for (var i = 0; i < 7; i++) {
+          var ang = Math.random() * TAU, sp = 1.4 + Math.random() * 2.6;
+          drops.push({ x: duck.x, y: duck.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                       r: 1 + Math.random() * 1.8, life: 0.3 + Math.random() * 0.35, age: 0 });
         }
-
-        // startled off early if the cursor comes right up to it
-        var dx = f.x - mouse.x, dy = f.y - mouse.y;
-        if (mouse.on && dx * dx + dy * dy < 90 * 90 && f.wait > 0.4) f.wait = 0.4;
-
-        f.wait -= dt;
-        if (f.wait <= 0 && pads.length > 1) {
-          // pick a different pad, preferring a nearby one
-          var best = -1, bestScore = 1e9;
-          for (var p = 0; p < pads.length; p++) {
-            if (p === f.pad) continue;
-            var ddx = pads[p].x - f.x, ddy = pads[p].y - f.y;
-            var d = Math.sqrt(ddx * ddx + ddy * ddy) + Math.random() * 420;
-            if (d < bestScore) { bestScore = d; best = p; }
-          }
-          if (best >= 0) {
-            f.state = "hop";
-            f.u = 0;
-            f.fx = f.x; f.fy = f.y;
-            f.tx = pads[best].x; f.ty = pads[best].y;
-            f.dur = 0.5 + Math.hypot(f.tx - f.fx, f.ty - f.fy) / 700;
-            f.a = Math.atan2(f.ty - f.fy, f.tx - f.fx);
-            f.pad = best;
-            addRipple(f.fx, f.fy, 34 + Math.random() * 18, 0, 0.3, 0.45);
-          }
-        }
-
-      } else {
-        f.u += dt / f.dur;
-        if (f.u >= 1) {
-          f.u = 1;
-          f.state = "rest";
-          f.wait = 4 + Math.random() * 10;
-          addRipple(f.tx, f.ty, 48 + Math.random() * 26, 0, 0.42, 0.6);
-          for (var d2 = 0; d2 < 5; d2++) {
-            var ang = Math.random() * TAU, sp = 1.2 + Math.random() * 2.2;
-            drops.push({ x: f.tx, y: f.ty, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-                         r: 1 + Math.random() * 1.6, life: 0.3 + Math.random() * 0.3, age: 0 });
-          }
-        }
-        f.x = f.fx + (f.tx - f.fx) * f.u;
-        f.y = f.fy + (f.ty - f.fy) * f.u;
       }
     }
+
+    // the wake it pushes out behind
+    duck.wake -= dt;
+    if (duck.wake <= 0) {
+      duck.wake = 0.5 + Math.random() * 0.35;
+      addRipple(duck.x - Math.cos(duck.a) * 10, duck.y - Math.sin(duck.a) * 10,
+                34 + Math.random() * 22, 0, 0.26, 0.4);
+    }
+
+    // koi keep out from under it
+    for (var k = 0; k < fish.length; k++) {
+      var f = fish[k], h = f.spine[0];
+      var fx = h.x - duck.x, fy = h.y - duck.y;
+      var fd = Math.sqrt(fx * fx + fy * fy);
+      if (fd < 110) {
+        var s2 = (1 - fd / 110) * 0.7;
+        if (s2 > f.startle) f.startle = s2;
+        f.wander = Math.atan2(fy, fx);
+      }
+    }
+
+    var out = 150;
+    if (duck.x < -out || duck.x > W + out || duck.y < -out || duck.y > H + out) duck = null;
   }
 
-  function drawFrogs() {
-    for (var i = 0; i < frogs.length; i++) {
-      var f = frogs[i];
-      var lift = f.state === "hop" ? Math.sin(Math.PI * f.u) : 0;
-      var s = f.size * (1 + lift * 0.3);
+  function drawDuck() {
+    if (!duck) return;
+    var s = duck.size;
+    var dip = duck.dip > 0 ? Math.min(1, duck.dip) : 0;
 
-      // its shadow stays on the water and separates as it rises
-      if (lift > 0.02) {
-        ctx.globalAlpha = 0.2 * (1 - lift * 0.4);
-        ctx.fillStyle = "#03120d";
-        ctx.beginPath();
-        ctx.ellipse(f.x + lift * 9, f.y + lift * 13, 7 * f.size, 5 * f.size, 0, 0, TAU);
-        ctx.fill();
-      }
+    // the V it pushes ahead of itself
+    ctx.save();
+    ctx.translate(duck.x, duck.y);
+    ctx.rotate(duck.a);
 
-      ctx.save();
-      ctx.translate(f.x - lift * 5, f.y - lift * 8);
-      ctx.rotate(f.a);
-
-      // hind legs, tucked when resting and extended mid-hop
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = C.frogDark;
-      for (var q = -1; q <= 1; q += 2) {
-        ctx.save();
-        ctx.translate(-2.5 * s, q * 3.4 * s);
-        ctx.rotate(q * (0.7 - lift * 0.5));
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 4.6 * s, 1.9 * s, 0, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // front legs
-      for (var w = -1; w <= 1; w += 2) {
-        ctx.beginPath();
-        ctx.ellipse(3.4 * s, w * 2.8 * s, 2.6 * s, 1.1 * s, w * 0.4, 0, TAU);
-        ctx.fill();
-      }
-
-      // body
-      ctx.globalAlpha = 0.96;
-      ctx.fillStyle = C.frog;
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = C.light;
+    ctx.lineWidth = 1.4;
+    for (var q = -1; q <= 1; q += 2) {
       ctx.beginPath();
-      ctx.ellipse(0, 0, 6.2 * s, 4.2 * s, 0, 0, TAU);
-      ctx.fill();
-
-      // a couple of darker blotches
-      ctx.globalAlpha = 0.4;
-      ctx.fillStyle = C.frogDark;
-      ctx.beginPath();
-      ctx.ellipse(-1.4 * s, -1.2 * s, 1.8 * s, 1.2 * s, 0.4, 0, TAU);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(-0.6 * s, 1.6 * s, 1.4 * s, 0.9 * s, -0.3, 0, TAU);
-      ctx.fill();
-
-      // eyes on top of the head, which is what reads as "frog" from above
-      ctx.globalAlpha = 0.95;
-      for (var e = -1; e <= 1; e += 2) {
-        ctx.fillStyle = C.frog;
-        ctx.beginPath();
-        ctx.ellipse(4.4 * s, e * 2.2 * s, 1.9 * s, 1.7 * s, 0, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = "#12140f";
-        ctx.beginPath();
-        ctx.arc(4.9 * s, e * 2.3 * s, 0.85 * s, 0, TAU);
-        ctx.fill();
-      }
-
-      ctx.restore();
+      ctx.moveTo(-6 * s, q * 3 * s);
+      ctx.quadraticCurveTo(-30 * s, q * 12 * s, -64 * s, q * 26 * s);
+      ctx.stroke();
     }
+
+    // body, sitting low in the water
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = "#03120d";
+    ctx.beginPath();
+    ctx.ellipse(1.5 * s, 2.5 * s, 14 * s, 9 * s, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.97;
+    ctx.fillStyle = C.duck;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 13.5 * s, 8.5 * s, 0, 0, TAU);
+    ctx.fill();
+
+    // folded wing
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = C.duckHead;
+    ctx.beginPath();
+    ctx.ellipse(-1.5 * s, 0, 8 * s, 5 * s, 0, 0, TAU);
+    ctx.fill();
+
+    // tail
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = C.duck;
+    ctx.beginPath();
+    ctx.moveTo(-12 * s, -3 * s);
+    ctx.lineTo(-20 * s, 0);
+    ctx.lineTo(-12 * s, 3 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    // head and bill, tucked forward and down when dabbling
+    var hx = (12 - dip * 7) * s;
+    ctx.globalAlpha = 0.97 - dip * 0.35;
+    ctx.fillStyle = C.duckHead;
+    ctx.beginPath();
+    ctx.ellipse(hx, 0, 5.2 * s, 4.6 * s, 0, 0, TAU);
+    ctx.fill();
+
+    if (dip < 0.7) {
+      ctx.fillStyle = C.duckBill;
+      ctx.beginPath();
+      ctx.ellipse(hx + 5.4 * s, 0, 3.4 * s, 1.9 * s, 0, 0, TAU);
+      ctx.fill();
+    }
+
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
@@ -1525,7 +1529,7 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
     updateDuckweed(dt);
-    updateFrogs(dt);
+    updateDuck(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
        distance travelled rather than per frame, so the trail is even at any
@@ -1582,7 +1586,7 @@
        which you can watch happen. */
     nextAmbient -= dt;
     if (nextAmbient <= 0 && weeds.length && ripples.length < 40) {
-      nextAmbient = 1.1 + Math.random() * 3;
+      nextAmbient = 0.8 + Math.random() * 1.8;
       var wd = weeds[(Math.random() * weeds.length) | 0];
       addRipple(wd.x + (Math.random() - 0.5) * 40,
                 wd.y + (Math.random() - 0.5) * 40,
@@ -1635,7 +1639,7 @@
 
     drawDuckweed();      // floating leaves, carried by the waves
     drawPads();          // floating on the surface, so over the fish
-    drawFrogs();         // sitting on top of them
+    drawDuck();
   }
 
   var last = 0;
@@ -1678,7 +1682,6 @@
     initBackdrop();
     makePads();
     padBuoyancy();
-    makeFrogs();
     makeDuckweed();
     stock();
   }
@@ -1729,7 +1732,7 @@
     pads: function () { return pads; },
     weeds: function () { return weeds; },
     ripples: function () { return ripples; },
-    frogs: function () { return frogs; },
+    duck: function () { return duck; },
     caustic: function () { return { img: cImg, w: CW, h: CH, scale: CW / W }; },
     food: function () { return pellets; },
   };
