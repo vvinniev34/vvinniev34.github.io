@@ -1395,15 +1395,11 @@
       var sp = spray[sk];
       if (sp.delay > 0) { sp.delay -= dt; continue; }
       sp.age += dt;
-      /* Carried by the cursor's wake and by any other wavefront, exactly
-         like the food and the duckweed. Spray was the last loose thing on
-         the surface that ignored the current entirely. */
-      waveForce(sp.x, sp.y, _wf, false);
-      /* Light coupling on purpose. At 1.2 a droplet was shoved again on
-         every frame the splash's own 230px ring swept over it, so instead
-         of settling it rode the wavefront all the way out. */
-      sp.vx += _wf[0] * 0.3;
-      sp.vy += _wf[1] * 0.3;
+      /* Deliberately not coupled to the wave field. Spray is airborne for
+         the half second it exists — it is thrown, it falls, it is gone.
+         Pushing it around with surface currents was both wrong and the
+         thing that let droplets ride a splash's own ring off-screen.
+         Skipping it also drops ~30 waveForce samples a frame. */
       sp.x += sp.vx; sp.y += sp.vy;
       sp.vx *= 0.92; sp.vy *= 0.92;
       if (sp.age >= sp.life) {
