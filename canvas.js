@@ -379,9 +379,19 @@
     return left.concat(right.reverse());
   }
 
+  /* bodyOutline() walks 13 joints doing a normalise (and a sqrt) each,
+     and fishPath() was calling it fresh for the shadow, the body and the
+     clip — three times per fish, plus again for every edge ghost. Cached
+     against a frame counter instead. */
+  var frameId = 0;
+
   function fishPath(f) {
+    if (f._outFrame !== frameId) {
+      f._outline = bodyOutline(f);
+      f._outFrame = frameId;
+    }
     ctx.beginPath();
-    smoothShape(bodyOutline(f));
+    smoothShape(f._outline);
     ctx.closePath();
   }
 
@@ -1018,8 +1028,9 @@
       for (var i = 0; i < weed2.length; i++) {
         var p = weed2[i];
         if ((p.tone > 0.7) !== !!pass) continue;
+        // near-round anyway, and arc() is cheaper than ellipse()
         ctx.moveTo(p.x + p.r, p.y);
-        ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, p.rot, 0, TAU);
+        ctx.arc(p.x, p.y, p.r, 0, TAU);
       }
       ctx.fill();
     }
@@ -1072,12 +1083,27 @@
          150px out before the spring could do anything. What looked like
          "not drifting back" was really "dragged much too far first".
          A nudge now, with a spring soft enough to take its time. */
-      var give = p.buoy * 0.7;
-      p.vx += _wf[0] * give - p.ox * 0.013;
-      p.vy += _wf[1] * give - p.oy * 0.013;
-      p.vx *= 0.976; p.vy *= 0.976;
+      /* A pad is anchored by a stem to the bottom. It should rock and bob
+         where it sits, not be shunted around the pond.
+
+         Softening the spring did not fix the "snapping back" because the
+         spring was never the problem: coupling was high enough to throw a
+         pad 90px, and any oscillator crosses its midpoint at A*omega — a
+         90px swing passes through centre at ~10px a frame however gentle
+         the spring is. The snap WAS the amplitude. So: much less travel,
+         and the energy goes into tilt instead, which is what a moored
+         pad actually does in a wave. */
+      var give = p.buoy * 0.16;
+      p.vx += _wf[0] * give - p.ox * 0.02;
+      p.vy += _wf[1] * give - p.oy * 0.02;
+      p.vx *= 0.97; p.vy *= 0.97;
       p.ox += p.vx; p.oy += p.vy;
-      p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.05;
+      /* Clamped. Unbounded this reached 85 degrees — the pad stood on its
+         edge. A pad on a wave tips a few degrees. */
+      var wantTilt = (_wf[0] + _wf[1]) * 0.8 * p.buoy;
+      if (wantTilt > 0.2) wantTilt = 0.2;
+      else if (wantTilt < -0.2) wantTilt = -0.2;
+      p.tilt += (wantTilt - p.tilt) * 0.045;
 
       ctx.save();
       ctx.translate(p.x + drift + p.ox, p.y + bob + p.oy);
@@ -1206,10 +1232,17 @@
       var reach = subsurface ? rp.sub : 1;
       if (reach < 0.02) continue;
       var dx = x - rp.x, dy = y - rp.y;
-      var d = Math.sqrt(dx * dx + dy * dy) || 1;
-      var band = Math.abs(d - rp.r);
       var width = 22 + rp.r * 0.12;
-      if (band > width) continue;
+      /* Reject on squared distance first. Only points actually inside the
+         annulus pay for a sqrt, and with ~160 callers a frame against
+         every live ripple most of them are nowhere near one. */
+      var d2 = dx * dx + dy * dy;
+      var outer = rp.r + width;
+      if (d2 > outer * outer) continue;
+      var inner = rp.r - width;
+      if (inner > 0 && d2 < inner * inner) continue;
+      var d = Math.sqrt(d2) || 1;
+      var band = Math.abs(d - rp.r);
       /* Amplitude scales with the size of the wave, so a small wake ring
          nudges and a big splash ring shoves. Without this every ring pushed
          the same and a click felt no heavier than a mouse sweep. */
@@ -1706,6 +1739,7 @@
   }
 
   function draw() {
+    frameId++;
     ctx.clearRect(0, 0, W, H);
     drawWater();
     drawWakes();
