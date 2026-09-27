@@ -1556,7 +1556,10 @@
       cacheRing(rp, k);          // once, for all four strokes below
       if (rp.r > 4) swell(g, rp, k);
 
-      var a = Math.pow(1 - k, 1.25) * 0.88 * rp.weight;
+      /* Clamped: a splash ring's weight is 1.35, so this came out at 1.13
+         and every heavy ring sat pinned at the canvas maximum, losing the
+         distinction between a big one and a very big one. */
+      var a = Math.min(1, Math.pow(1 - k, 1.25) * 0.88 * rp.weight);
       if (a <= 0.004 || rp.r < 4) continue;
       // and the crest itself, likewise with no dark companion
       var lw = (1.9 * rp.weight + 0.5) * (1 - k * 0.35);
