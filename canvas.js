@@ -846,10 +846,17 @@
      including the fish and the planting on the bottom, ~0.1 only ruffles
      the surface. The cursor's wake is shallow; a click goes all the way. */
   function addRipple(x, y, max, delay, weight, sub) {
+    /* Deform state is allocated up front for every ripple, not lazily on
+       first contact. Lazily meant a ring switched rendering path the moment
+       the cursor touched it, so a disturbed ring was drawn by different
+       code than an untouched one. */
+    var def = [], cut = [], tmp = [];
+    for (var i = 0; i < RN; i++) { def[i] = 0; cut[i] = 0; tmp[i] = 0; }
     ripples.push({ x: x, y: y, r: 0, max: max, life: 0, delay: delay || 0,
                    weight: weight == null ? 1 : weight,
                    sub: sub == null ? 1 : sub,
-                   seed: Math.random() * 100 });
+                   seed: Math.random() * 100,
+                   def: def, cut: cut, tmp: tmp });
   }
 
   /* Outward push from any wavefront currently passing over a point. This is
@@ -895,12 +902,6 @@
      disturbed one was happening to a ring nobody could see. */
   var RIPPLE_LIFE = 2.8;
 
-  function ensureDeform(rp) {
-    if (rp.def) return;
-    rp.def = []; rp.cut = []; rp.tmp = [];
-    for (var i = 0; i < RN; i++) { rp.def[i] = 0; rp.cut[i] = 0; rp.tmp[i] = 0; }
-  }
-
   function disturbRings(dt) {
     if (!ripples.length) return;
     var moving = Math.sqrt(mouse.dx * mouse.dx + mouse.dy * mouse.dy);
@@ -915,7 +916,6 @@
         var d = Math.sqrt(dx * dx + dy * dy) || 1;
         var band = 16 + rp.r * 0.12;
         if (Math.abs(d - rp.r) < band) {
-          ensureDeform(rp);
           var a = Math.atan2(dy, dx);
           var slot = Math.floor(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN) % RN;
           // how much of the cursor's motion is along the radius
@@ -929,12 +929,10 @@
             var falloff = 1 - Math.abs(o) / 3;
             var nd = rp.def[si] + vr * 0.75 * falloff;
             rp.def[si] = nd > lim ? lim : (nd < -lim ? -lim : nd);
-            rp.cut[si] = Math.min(1.3, rp.cut[si] + bite * 0.8 * falloff);
+            rp.cut[si] = Math.min(1.3, rp.cut[si] + bite * 0.5 * falloff);
           }
         }
       }
-
-      if (!rp.def) continue;
 
       // the dent travels around the crest and flattens out; the tear heals
       var spread = 0.2, damp = 1 - dt * 1.1, heal = 1 - dt * 0.8;
@@ -1039,129 +1037,105 @@
      edge, which is also where the per-angle dents and tears show up.
      -------------------------------------------------------------------------- */
 
+  var TAU = Math.PI * 2;
+
+  /* Radius of a ripple at a given angle: its own procedural buckle, plus
+     whatever the cursor has dented into it. */
+  function sampleR(rp, ang, radius, k) {
+    var warp = 1
+      + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
+      + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
+      + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
+    var f = ((ang + TAU) % TAU) / TAU * RN;
+    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+    return radius * warp + rp.def[i0] * (1 - m) + rp.def[i1] * m;
+  }
+
+  function cutAt(rp, ang) {
+    var f = ((ang + TAU) % TAU) / TAU * RN;
+    var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
+    return rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
+  }
+
+  /* One crest line. Walks the circumference and strokes the runs that
+     survive, so a torn ring comes out as separate arcs. An untouched ring
+     has cut[] all zero and simply emits one unbroken run — same code. */
+  function crest(g, rp, k, radius, alpha, width, colour) {
+    var steps = Math.max(10, Math.min(32, Math.round(radius / 6)));
+    g.strokeStyle = colour;
+    g.lineWidth = width;
+    var open = false;
+    for (var i = 0; i <= steps; i++) {
+      var ang = (i / steps) * TAU;
+      var c = cutAt(rp, ang);
+      if (c > 0.6) {
+        if (open) { g.stroke(); open = false; }
+        continue;
+      }
+      var r = sampleR(rp, ang, radius, k);
+      var px = rp.x + Math.cos(ang) * r, py = rp.y + Math.sin(ang) * r;
+      if (!open) {
+        g.beginPath();
+        g.globalAlpha = alpha * (1 - c);
+        g.moveTo(px, py);
+        open = true;
+      } else {
+        g.lineTo(px, py);
+      }
+    }
+    if (open) g.stroke();
+  }
+
+  /* The body of a wave: a broad band of lifted light, with its trough
+     behind it. */
+  function swell(g, rp, k) {
+    var ws = Math.pow(1 - k, 1.1) * rp.weight;
+    if (ws < 0.04) return;
+
+    var band = 26 + rp.r * 0.42;
+    var inner = Math.max(0, rp.r - band), outer = rp.r + band;
+
+    var gs = g.createRadialGradient(rp.x, rp.y, inner, rp.x, rp.y, outer);
+    gs.addColorStop(0, "transparent");
+    gs.addColorStop(0.45, C.light);
+    gs.addColorStop(1, "transparent");
+    g.globalAlpha = 0.38 * ws;
+    g.fillStyle = gs;
+    g.fillRect(rp.x - outer, rp.y - outer, outer * 2, outer * 2);
+
+    var ti = Math.max(0, rp.r - band * 1.9), to = Math.max(1, rp.r - band * 0.15);
+    var gd = g.createRadialGradient(rp.x, rp.y, ti, rp.x, rp.y, to);
+    gd.addColorStop(0, "transparent");
+    gd.addColorStop(0.6, C.deep);
+    gd.addColorStop(1, "transparent");
+    g.globalAlpha = 0.28 * ws;
+    g.fillStyle = gd;
+    g.fillRect(rp.x - to, rp.y - to, to * 2, to * 2);
+  }
+
+  /* ---- wavefronts --------------------------------------------------------
+     Every ripple goes through exactly this, with no exceptions and no
+     budget that some of them miss out on. Ambient, cursor wake and splash
+     differ only in the three numbers they were created with: how big, how
+     strong, and how deep the disturbance reaches.
+     -------------------------------------------------------------------------- */
+
   function drawWavefronts(g) {
     g.lineCap = "round";
-    var swells = 0;
 
-    ripples.forEach(function (rp) {
-      if (rp.delay > 0) return;
-
-      // the body of the wave: a broad soft band of displaced light
-      if (rp.r > 6 && swells < 8) {
-        var wk = Math.min(1, rp.life / RIPPLE_LIFE);
-        var ws = Math.pow(1 - wk, 1.1) * rp.weight;
-        if (ws >= 0.05) {
-          swells++;
-          var band = 26 + rp.r * 0.42;
-          var inner0 = Math.max(0, rp.r - band), outer0 = rp.r + band;
-
-          var gs = g.createRadialGradient(rp.x, rp.y, inner0, rp.x, rp.y, outer0);
-          gs.addColorStop(0, "transparent");
-          gs.addColorStop(0.45, C.light);
-          gs.addColorStop(1, "transparent");
-          g.globalAlpha = 0.38 * ws;
-          g.fillStyle = gs;
-          g.fillRect(rp.x - outer0, rp.y - outer0, outer0 * 2, outer0 * 2);
-
-          var ti = Math.max(0, rp.r - band * 1.9), to = Math.max(1, rp.r - band * 0.15);
-          var gd = g.createRadialGradient(rp.x, rp.y, ti, rp.x, rp.y, to);
-          gd.addColorStop(0, "transparent");
-          gd.addColorStop(0.6, C.deep);
-          gd.addColorStop(1, "transparent");
-          g.globalAlpha = 0.28 * ws;
-          g.fillStyle = gd;
-          g.fillRect(rp.x - to, rp.y - to, to * 2, to * 2);
-        }
-      }
-
-      if (rp.delay > 0) return;
+    for (var i = 0; i < ripples.length; i++) {
+      var rp = ripples[i];
+      if (rp.delay > 0) continue;
       var k = Math.min(1, rp.life / RIPPLE_LIFE);
-      // Gentler fade curve, so a ring stays legible for most of its life
-      // and there is actually something on screen to disturb.
+
+      if (rp.r > 4) swell(g, rp, k);
+
       var a = Math.pow(1 - k, 1.25) * 0.88 * rp.weight;
-      if (a <= 0.004) return;
-
-      /* An expanding circle reads as a graphic; a real wavefront buckles as
-         it travels. Radius is modulated per-angle, and the distortion grows
-         with distance from the impact. */
-      function sampleR(ang, radius) {
-        var warp = 1
-          + Math.sin(ang * 3 + rp.seed) * 0.035 * (0.4 + k)
-          + Math.sin(ang * 5 - rp.seed * 1.7 + rp.life * 3) * 0.026 * (0.3 + k)
-          + Math.sin(ang * 8 + rp.seed * 0.6) * 0.014;
-        var rr = radius * warp;
-        if (rp.def) {
-          // linear blend between the two nearest radial samples
-          var f = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
-          var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
-          rr += rp.def[i0] * (1 - m) + rp.def[i1] * m;
-        }
-        return rr;
-      }
-
-      function cutAt(ang) {
-        if (!rp.def) return 0;
-        var f = ((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * RN;
-        var i0 = Math.floor(f) % RN, i1 = (i0 + 1) % RN, m = f - Math.floor(f);
-        return rp.cut[i0] * (1 - m) + rp.cut[i1] * m;
-      }
-
-      function ring(radius, alpha, width, colour) {
-        // Scale detail with size; the cursor wake spawns a lot of small ones.
-        var steps = Math.max(9, Math.min(30, Math.round(radius / 6)));
-        g.strokeStyle = colour;
-        g.lineWidth = width;
-
-        // Untouched ring: one closed path, as before.
-        if (!rp.def) {
-          g.beginPath();
-          for (var si = 0; si <= steps; si++) {
-            var ang = (si / steps) * Math.PI * 2;
-            var rr = sampleR(ang, radius);
-            var px = rp.x + Math.cos(ang) * rr, py = rp.y + Math.sin(ang) * rr;
-            if (si === 0) g.moveTo(px, py); else g.lineTo(px, py);
-          }
-          g.closePath();
-          g.globalAlpha = alpha;
-          g.stroke();
-          return;
-        }
-
-        /* Torn ring: walk the circumference and stroke only the runs that
-           survive, so a crest the cursor has cut through renders as broken
-           arcs with faded ends rather than a continuous loop. */
-        var open = false;
-        for (var sj = 0; sj <= steps; sj++) {
-          var a2 = (sj / steps) * Math.PI * 2;
-          var c = cutAt(a2);
-          if (c > 0.6) {                        // severed here
-            if (open) { g.stroke(); open = false; }
-            continue;
-          }
-          var r2 = sampleR(a2, radius);
-          var qx = rp.x + Math.cos(a2) * r2, qy = rp.y + Math.sin(a2) * r2;
-          if (!open) {
-            g.beginPath();
-            g.globalAlpha = alpha * (1 - c);
-            g.moveTo(qx, qy);
-            open = true;
-          } else {
-            g.lineTo(qx, qy);
-          }
-        }
-        if (open) g.stroke();
-      }
-
-      /* Trough behind, crest in front. The pair is what makes a ring read as
-         a raised ridge of water; a single pale line disappears into the
-         caustics and is erased entirely by the panels' backdrop blur. */
-      /* A single crisp crest with a soft shadow just outside it. The swell
-         above already carries the mass of the wave, so the stroke only has
-         to draw the edge — three heavy strokes fought with it. */
+      if (a <= 0.004) continue;
       var lw = (1.9 * rp.weight + 0.5) * (1 - k * 0.35);
-      ring(rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
-      ring(rp.r, a * 0.92, lw, C.wave);
-    });
+      crest(g, rp, k, rp.r * 1.025, a * 0.45, lw * 1.2, C.waveDark);
+      crest(g, rp, k, rp.r, a * 0.92, lw, C.wave);
+    }
 
     /* Spray thrown up by an impact belongs to the water as well, so it is
        drawn here rather than with the objects above. */
