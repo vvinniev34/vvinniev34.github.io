@@ -1496,14 +1496,11 @@
        before it grew. That is where they came from. */
     if (rp.r < band * 1.4) return;
 
-    /* Stroke width is capped: a 230px ripple was painting a 61px-wide band
-       around its whole circumference, ~88k pixels for one stroke. Also
-       bounded by the radius, so a small ring can never be over-stroked
-       into a blob. */
-    /* Light only. There used to be a darker pass behind the crest for
-       relief, which trailed every ripple with a dark ring — a shadow the
-       water dragged around after it. Water lifting does brighten; it does
-       not leave a dark wake. */
+    /* Light only, and stroked along the deformed path rather than filled
+       as a circular gradient — so a dented ring's body dents with it.
+       Width is capped (a 230px ripple was painting a 61px-wide band around
+       its whole circumference) and bounded by the radius, so a small ring
+       can never be over-stroked into a blob. */
     var body = Math.min(band * 1.5, 34, rp.r * 0.9);
     crest(g, rp, rp.r, 0.34 * ws, body, C.light);
   }
@@ -1570,37 +1567,6 @@
 
   /* The body of a wave: a broad band of lifted light, with its trough
      behind it. */
-  function swell(g, rp, k) {
-    var ws = Math.pow(1 - k, 1.1) * rp.weight;
-    if (ws < 0.04) return;
-
-    /* Band scales with the ripple so it is always a ring. It used to be
-       26 + 0.42r, which at small radii was wider than the ripple itself —
-       the inner edge clamped to zero and the "ring" filled in as a soft
-       blob. That is why ambient ripples read as drifting smoke while the
-       cursor's fresh ones read as rings: same code, two different shapes
-       depending on size. */
-    var band = 4 + rp.r * 0.16;
-    var inner = Math.max(0, rp.r - band), outer = rp.r + band;
-
-    var gs = g.createRadialGradient(rp.x, rp.y, inner, rp.x, rp.y, outer);
-    gs.addColorStop(0, "transparent");
-    gs.addColorStop(0.45, C.light);
-    gs.addColorStop(1, "transparent");
-    g.globalAlpha = 0.38 * ws;
-    g.fillStyle = gs;
-    g.fillRect(rp.x - outer, rp.y - outer, outer * 2, outer * 2);
-
-    var ti = Math.max(0, rp.r - band * 1.9), to = Math.max(1, rp.r - band * 0.15);
-    var gd = g.createRadialGradient(rp.x, rp.y, ti, rp.x, rp.y, to);
-    gd.addColorStop(0, "transparent");
-    gd.addColorStop(0.6, C.deep);
-    gd.addColorStop(1, "transparent");
-    g.globalAlpha = 0.28 * ws;
-    g.fillStyle = gd;
-    g.fillRect(rp.x - to, rp.y - to, to * 2, to * 2);
-  }
-
   /* ---- wavefronts --------------------------------------------------------
      Every ripple goes through exactly this, with no exceptions and no
      budget that some of them miss out on. Ambient, cursor wake and splash
