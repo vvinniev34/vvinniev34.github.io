@@ -1538,35 +1538,6 @@
   /* One crest line. Walks the circumference and strokes the runs that
      survive, so a torn ring comes out as separate arcs. An untouched ring
      has cut[] all zero and simply emits one unbroken run — same code. */
-  function crest(g, rp, k, radius, alpha, width, colour) {
-    var steps = Math.max(10, Math.min(32, Math.round(radius / 6)));
-    g.strokeStyle = colour;
-    g.lineWidth = width;
-    g.lineJoin = "round";
-    var open = false;
-    for (var i = 0; i <= steps; i++) {
-      var ang = (i / steps) * TAU;
-      var c = cutAt(rp, ang);
-      if (c > 0.6) {
-        if (open) { g.stroke(); open = false; }
-        continue;
-      }
-      var r = sampleR(rp, ang, radius, k);
-      var px = rp.x + Math.cos(ang) * r, py = rp.y + Math.sin(ang) * r;
-      if (!open) {
-        g.beginPath();
-        g.globalAlpha = alpha * (1 - c);
-        g.moveTo(px, py);
-        open = true;
-      } else {
-        g.lineTo(px, py);
-      }
-    }
-    if (open) g.stroke();
-  }
-
-  /* The body of a wave: a broad band of lifted light, with its trough
-     behind it. */
   /* ---- wavefronts --------------------------------------------------------
      Every ripple goes through exactly this, with no exceptions and no
      budget that some of them miss out on. Ambient, cursor wake and splash
