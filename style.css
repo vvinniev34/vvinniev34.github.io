@@ -36,7 +36,7 @@ html[data-theme="light"] {
   --weed:       #3a6b49;   /* submerged planting */
   --weed-tip:   #63a06d;
   --algae:      #4f7a53;   /* matted growth on the floor */
-  --algae-2:    #86913f;   /* olive, where it is thinner */
+  --algae-2:    #3f7d6a;   /* a cooler green, where it is thinner */
   --detritus:   #8d6a38;   /* sunken leaves and twigs */
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
@@ -67,7 +67,7 @@ html[data-theme="dark"] {
   --weed:       #1f6b4b;   /* submerged planting */
   --weed-tip:   #44a877;
   --algae:      #235e3d;   /* matted growth on the floor */
-  --algae-2:    #4a6b2c;   /* olive, where it is thinner */
+  --algae-2:    #1d5750;   /* a cooler green, where it is thinner */
   --detritus:   #5c4a2c;   /* sunken leaves and twigs */
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
