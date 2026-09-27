@@ -1072,10 +1072,10 @@
          150px out before the spring could do anything. What looked like
          "not drifting back" was really "dragged much too far first".
          A nudge now, with a spring soft enough to take its time. */
-      var give = p.buoy * 1.3;
-      p.vx += _wf[0] * give - p.ox * 0.03;
-      p.vy += _wf[1] * give - p.oy * 0.03;
-      p.vx *= 0.955; p.vy *= 0.955;
+      var give = p.buoy * 0.7;
+      p.vx += _wf[0] * give - p.ox * 0.013;
+      p.vy += _wf[1] * give - p.oy * 0.013;
+      p.vx *= 0.976; p.vy *= 0.976;
       p.ox += p.vx; p.oy += p.vy;
       p.tilt += ((_wf[0] + _wf[1]) * 0.34 * p.buoy - p.tilt) * 0.05;
 
@@ -1171,7 +1171,12 @@
         squash: o.squash, rot: Math.random() * TAU,
         ring: !!o.ring, age: 0,
         life: o.life * (0.7 + Math.random() * 0.6),
-        delay: o.delay || 0,
+        /* Thrown water goes up as well as out. From directly above that
+           reads as a droplet swelling to its peak and shrinking as it
+           falls — the whole of the arc, from this angle. */
+        arc: !!o.arc,
+        // and they don't all leave the rim on the same frame
+        delay: (o.delay || 0) + Math.random() * (o.scatter || 0),
       });
     }
   }
@@ -1337,17 +1342,19 @@
     addRipple(x, y, 230, 0, 1.35, 1);
 
     /* Foam torn off the rim, and droplets flung out of it. */
-    sprayBurst(x, y, 13, { speed: 1.8, r: 3.4, squash: 0.65,
-                           life: 0.44, offset: 22 });
-    sprayBurst(x, y, 24, { speed: 4.2, r: 1.9, squash: 1,
-                           life: 0.6, ring: true });
+    /* Foam lingers on the rim and dissolves there, rather than flying
+       off alongside the droplets. */
+    sprayBurst(x, y, 13, { speed: 0.9, r: 3.8, squash: 0.6,
+                           life: 0.7, offset: 24, scatter: 0.05 });
+    sprayBurst(x, y, 24, { speed: 4.2, r: 1.9, squash: 1, life: 0.6,
+                           ring: true, arc: true, scatter: 0.07 });
 
     /* The rebound — water driven back up the middle falls in again a beat
        later. It is just the same two primitives with a delay on them; no
        separate machinery for it any more. */
     addRipple(x, y, 95, 0.45, 0.5, 0.55);
-    sprayBurst(x, y, 7, { speed: 1.6, r: 1.6, squash: 1,
-                          life: 0.5, ring: true, delay: 0.45 });
+    sprayBurst(x, y, 7, { speed: 1.6, r: 1.6, squash: 1, life: 0.5,
+                          ring: true, arc: true, delay: 0.45, scatter: 0.05 });
 
     /* Striders sit on the surface film, so a splash throws them harder
        than it does anything swimming under it. They were previously the
@@ -1395,11 +1402,13 @@
       var sp = spray[sk];
       if (sp.delay > 0) { sp.delay -= dt; continue; }
       sp.age += dt;
-      /* Deliberately not coupled to the wave field. Spray is airborne for
-         the half second it exists — it is thrown, it falls, it is gone.
-         Pushing it around with surface currents was both wrong and the
-         thing that let droplets ride a splash's own ring off-screen.
-         Skipping it also drops ~30 waveForce samples a frame. */
+      /* Lightly coupled to the wave field, so the cursor's current and
+         passing wavefronts tug at spray in flight. Kept low: at 1.2 a
+         droplet was shoved again every frame the splash's own ring swept
+         over it, and rode the wavefront clean off the screen. */
+      waveForce(sp.x, sp.y, _wf, false);
+      sp.vx += _wf[0] * 0.3;
+      sp.vy += _wf[1] * 0.3;
       sp.x += sp.vx; sp.y += sp.vy;
       sp.vx *= 0.92; sp.vy *= 0.92;
       if (sp.age >= sp.life) {
@@ -1582,7 +1591,10 @@
       for (var si = 0; si < spray.length; si++) {
         var sp2 = spray[si];
         if (sp2.delay > 0) continue;
-        var rr = sp2.r * (1 - sp2.age / sp2.life);
+        var u = sp2.age / sp2.life;
+        var rr = sp2.arc
+          ? sp2.r * (0.45 + Math.sin(Math.PI * u) * 0.85) * (1 - u * 0.5)
+          : sp2.r * (1 - u);
         if (rr <= 0.05) continue;
         ctx.moveTo(sp2.x + rr, sp2.y);
         ctx.ellipse(sp2.x, sp2.y, rr, rr * sp2.squash, sp2.rot, 0, TAU);
