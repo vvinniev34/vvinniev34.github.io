@@ -229,6 +229,7 @@ body::after {
    you are / how to look around / where to go next. */
 .card__term {
   display: flex;
+  flex: 0 0 auto;          /* never squeezed to make room for anything else */
   min-height: 0;
   padding: clamp(1.1rem, 2.2vw, 1.5rem) clamp(1.5rem, 3vw, 2.25rem);
   border-top: 1px solid color-mix(in srgb, var(--rule) 55%, transparent);
@@ -238,14 +239,15 @@ body::after {
    glass — stacking glass on glass just muddies both. */
 .term {
   flex: 1 1 auto;
-  min-height: 11rem;
-  max-height: min(34dvh, 18rem);
+  min-height: 15rem;
+  max-height: min(46dvh, 26rem);
   background: color-mix(in srgb, var(--fg) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
   border-radius: 8px;
 }
 
 .card__links {
+  flex: 0 0 auto;
   padding: .85rem clamp(1.5rem, 3vw, 2.25rem);
   border-top: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
   background: var(--wash);
@@ -284,7 +286,7 @@ body::after {
   .card__intro { padding: clamp(1.15rem, 2.2vw, 1.75rem); }
   .card__term { padding: 0 clamp(1.15rem, 2.2vw, 1.75rem); }
   .card__links { padding: .7rem clamp(1.15rem, 2.2vw, 1.75rem); }
-  .term { min-height: 9rem; max-height: min(30dvh, 14rem); }
+  .term { min-height: 11rem; max-height: min(38dvh, 18rem); }
 }
 
 /* ---- theme toggle --------------------------------------------------------- */
@@ -552,11 +554,18 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
   .card__toggle, .card__tab { display: none !important; }
   .card.is-min .card__body { display: flex; }
 
-  .card__body { max-height: 100dvh; min-height: 100dvh; }
+  /* Was pinned to exactly 100dvh, so anything taller than the viewport
+     squeezed the children and the links bar rode up into the terminal.
+     Let it grow and let the page scroll — the card IS the page here. */
+  .card__body { max-height: none; min-height: 100dvh; overflow: visible; }
   .card__intro { padding: clamp(1.4rem, 6vw, 2rem); }
-  .card__term { padding: 0 clamp(1.4rem, 6vw, 2rem); }
-  .card__links { padding: .85rem clamp(1.4rem, 6vw, 2rem); }
-  .term { min-height: 12rem; max-height: min(44dvh, 22rem); }
+  .card__term { padding: clamp(1rem, 4vw, 1.4rem) clamp(1.4rem, 6vw, 2rem); }
+  /* clear of the home indicator */
+  .card__links {
+    padding: .9rem clamp(1.4rem, 6vw, 2rem);
+    padding-bottom: calc(.9rem + env(safe-area-inset-bottom, 0px));
+  }
+  .term { min-height: 15rem; max-height: none; }
 }
 
 /* ---- sections ------------------------------------------------------------- */
