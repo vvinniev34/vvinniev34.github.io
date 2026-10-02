@@ -41,8 +41,8 @@ html[data-theme="light"] {
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
-  --tin:        #b8a179;   /* the floating feed tin */
-  --tin-rim:    #8a7352;
+  --ring:       #c2a878;   /* the floating feeder ring */
+  --ring-dark:  #8f7a4e;
   --strider:    #3d4a42;   /* water striders */
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
@@ -74,8 +74,8 @@ html[data-theme="dark"] {
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
-  --tin:        #6d5c40;   /* the floating feed tin */
-  --tin-rim:    #473a27;
+  --ring:       #7a6743;   /* the floating feeder ring */
+  --ring-dark:  #4e4029;
   --strider:    #0c1a16;   /* water striders */
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;
@@ -213,44 +213,31 @@ body::after {
 .card.is-min:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--rule)); }
 
 /* ---- the first-run hint --------------------------------------------------
-   The card starts collapsed, so something has to say "open me". A ring
-   pulses out of the control until it has been used once; after that the
-   hint is just noise.
+   The whole collapsed tab is the target, so the whole tab is what
+   pulses. Lighting up only the little plus pointed at the wrong thing.
    -------------------------------------------------------------------------- */
 
+.card.is-hint {
+  animation: hintCard 2.2s var(--ease) infinite;
+}
 .card.is-hint .card__toggle span,
 .card.is-hint .card__toggle span::after { background: var(--accent); }
+.card.is-hint .card__tab { color: var(--accent); }
 
-.card.is-hint .card__toggle::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 8px;
-  border: 1.5px solid var(--accent);
-  animation: hintRing 2.1s var(--ease) infinite;
-  pointer-events: none;
-}
-
-@keyframes hintRing {
-  0%   { opacity: .7; transform: scale(1); }
-  70%  { opacity: 0;  transform: scale(1.75); }
-  100% { opacity: 0;  transform: scale(1.75); }
-}
-
-/* and the tab itself breathes very slightly, so the eye lands on it */
-.card.is-hint .card__tab { animation: hintGlow 2.1s var(--ease) infinite; }
-@keyframes hintGlow {
-  0%, 100% { color: var(--fg-soft); }
-  50%      { color: var(--accent); }
+@keyframes hintCard {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--rule) 65%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card.is-hint .card__toggle::before { animation: none; opacity: .7; }
-  .card.is-hint .card__tab { animation: none; color: var(--accent); }
+  .card.is-hint { animation: none; border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 }
-.card.is-min .card__body { display: none; }
-.card.is-min .card__toggle span { transform: rotate(180deg); }
-.card.is-min .card__toggle span::after { transform: rotate(90deg) scaleX(1); }
 
 /* Just the name, shown only while collapsed. */
 .card__tab {

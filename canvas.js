@@ -93,8 +93,8 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
-    C.tin       = v("--tin", "#b8a179");
-    C.tinRim    = v("--tin-rim", "#8a7352");
+    C.ring      = v("--ring", "#c2a878");
+    C.ringDark  = v("--ring-dark", "#8f7a4e");
     C.strider   = v("--strider", "#3d4a42");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
@@ -1110,82 +1110,78 @@
     ctx.globalAlpha = 1;
   }
 
-  /* ---- the feed tin -------------------------------------------------------
-     Somewhere the pellets come from. Koi ponds use a floating feeder ring
-     to stop food drifting off, so a tin bobbing on the surface is both
-     the authentic answer and an obvious thing to reach for.
+  /* ---- the feeder ring ----------------------------------------------------
+     A bamboo hoop floating on the surface with food penned inside it.
+     This is the real thing koi keepers use — it stops pellets drifting
+     off across the pond — so it belongs here in a way a tin did not.
 
-     Grab it and you take a handful — a varying one, as a handful is —
-     which follows the cursor until you let go, then scatters where you
-     dropped it.
+     Fixed position, because a feeder is moored. It was being dropped at
+     random on every load, which made it feel like set dressing rather
+     than a thing that lives there.
      -------------------------------------------------------------------------- */
 
   var tin = null;
-  var hand = null;          // { n, x, y } while a handful is being carried
+  var hand = null;          // { n, x, y, bits } while a handful is carried
+  var grabFrom = null;      // where the grab started, to tell a click from a drag
+  var tinHinted = false;
 
   function makeTin() {
     tin = {
-      x: W * (0.2 + Math.random() * 0.6),
-      y: H * (0.68 + Math.random() * 0.2),
-      r: 26,
+      x: Math.min(W * 0.17, 260),
+      y: H * 0.74,
+      r: 30,
       ox: 0, oy: 0, vx: 0, vy: 0,
-      phase: Math.random() * TAU,
+      phase: 0,
       seeds: [],
     };
-    // the pellets heaped inside it
-    for (var i = 0; i < 22; i++) {
-      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 13;
+    // food penned inside the hoop
+    for (var i = 0; i < 26; i++) {
+      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 17;
       tin.seeds.push({ x: Math.cos(a) * d, y: Math.sin(a) * d,
-                       r: 1.5 + Math.random() * 1.3 });
+                       r: 1.4 + Math.random() * 1.2 });
     }
+  }
+
+  function tinPos() {
+    return {
+      x: tin.x + tin.ox + Math.sin(t * 0.3) * 2.5,
+      y: tin.y + tin.oy + Math.sin(t * 0.55) * 1.8,
+    };
   }
 
   function tinAt(x, y) {
     if (!tin) return false;
-    var dx = x - (tin.x + tin.ox), dy = y - (tin.y + tin.oy);
-    return dx * dx + dy * dy < (tin.r + 10) * (tin.r + 10);
+    var p = tinPos();
+    var dx = x - p.x, dy = y - p.y;
+    return dx * dx + dy * dy < (tin.r + 8) * (tin.r + 8);
   }
 
   function updateTin(dt) {
     if (!tin) return;
-    // bobs and drifts on the waves like everything else afloat
+    // moored, so it only rides the waves — it does not wander
     waveForce(tin.x + tin.ox, tin.y + tin.oy, _wf, false);
-    tin.vx += _wf[0] * 0.5 - tin.ox * 0.02;
-    tin.vy += _wf[1] * 0.5 - tin.oy * 0.02;
-    tin.vx *= 0.96; tin.vy *= 0.96;
+    tin.vx += _wf[0] * 0.4 - tin.ox * 0.05;
+    tin.vy += _wf[1] * 0.4 - tin.oy * 0.05;
+    tin.vx *= 0.95; tin.vy *= 0.95;
     tin.ox += tin.vx; tin.oy += tin.vy;
   }
 
   function drawTin() {
     if (!tin) return;
-    var x = tin.x + tin.ox + Math.sin(t * 0.12 + tin.phase) * 4;
-    var y = tin.y + tin.oy + Math.sin(t * 0.5 + tin.phase) * 1.6;
-    var r = tin.r;
+    var p = tinPos(), r = tin.r;
 
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(p.x, p.y);
 
-    ctx.globalAlpha = 0.22;
+    // it sits in the water, so it dents the surface under itself
+    ctx.globalAlpha = 0.18;
     ctx.fillStyle = "#03120d";
     ctx.beginPath();
-    ctx.ellipse(3, 5, r, r * 0.9, 0, 0, TAU);
+    ctx.ellipse(2, 4, r * 1.02, r * 0.92, 0, 0, TAU);
     ctx.fill();
 
-    // rim
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = C.tinRim;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
-    ctx.fill();
-
-    // inside
-    ctx.fillStyle = C.tin;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.82, 0, TAU);
-    ctx.fill();
-
-    // the heap of food, in one path
-    ctx.globalAlpha = 0.95;
+    // food penned inside, drawn before the hoop so the hoop overlaps it
+    ctx.globalAlpha = 0.92;
     ctx.fillStyle = "#c98b3e";
     ctx.beginPath();
     for (var i = 0; i < tin.seeds.length; i++) {
@@ -1194,6 +1190,39 @@
       ctx.arc(sd.x, sd.y, sd.r, 0, TAU);
     }
     ctx.fill();
+
+    // the hoop: a bamboo ring, lit on one side
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = C.ringDark;
+    ctx.lineWidth = 5.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.stroke();
+
+    ctx.strokeStyle = C.ring;
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 0.4, 0, TAU);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = C.light;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 1.6, Math.PI * 1.05, Math.PI * 1.75);
+    ctx.stroke();
+
+    /* Until it has been used, a ring pulses off it — the same hint the
+       card uses, for the same reason: nothing else says "pick me up". */
+    if (!tinHinted && !reduced) {
+      var k = (t * 0.5) % 1;
+      ctx.globalAlpha = (1 - k) * 0.5;
+      ctx.strokeStyle = C.accent;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 3 + k * 16, 0, TAU);
+      ctx.stroke();
+    }
 
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -1212,6 +1241,21 @@
     }
     ctx.fill();
     ctx.globalAlpha = 1;
+  }
+
+  /* Scatter a handful at a point. Used by both the drop and the plain
+     click on the feeder. */
+  function scatterFood(n, x, y, spread) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * spread;
+      pellets.push({
+        x: x + Math.cos(a) * d, y: y + Math.sin(a) * d,
+        vx: Math.cos(a) * 0.2, vy: Math.sin(a) * 0.2,
+        r: 1.6 + Math.random() * 1.6,
+        age: 0, gone: false,
+      });
+    }
+    addRipple(x, y, 26 + Math.random() * 16, 0, 0.2, 0.25);
   }
 
   function makePads() {
@@ -2119,7 +2163,10 @@
     /* Reaching into the tin takes a handful rather than splashing. The
        amount varies, because a handful does. */
     if (tinAt(e.clientX, e.clientY)) {
-      var n = 7 + (Math.random() * 10 | 0);
+      /* A handful, and a different one each time — 6 to 19. */
+      var n = 6 + (Math.random() * 14 | 0);
+      tinHinted = true;
+      grabFrom = { x: e.clientX, y: e.clientY };
       hand = { n: n, x: e.clientX, y: e.clientY, bits: [] };
       for (var i = 0; i < n; i++) {
         var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 9;
@@ -2138,18 +2185,21 @@
   window.addEventListener("pointerup", function (e) {
     if (!hand) return;
     var n = hand.n, x = hand.x, y = hand.y;
+    var moved = grabFrom
+      ? Math.hypot(x - grabFrom.x, y - grabFrom.y)
+      : 99;
     hand = null;
+    grabFrom = null;
     document.body.style.cursor = "";
-    for (var i = 0; i < n; i++) {
-      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 34;
-      pellets.push({
-        x: x + Math.cos(a) * d, y: y + Math.sin(a) * d,
-        vx: Math.cos(a) * 0.2, vy: Math.sin(a) * 0.2,
-        r: 1.6 + Math.random() * 1.6,
-        age: 0, gone: false,
-      });
+
+    /* A click without a drag just tips food out around the feeder, so
+       you do not have to carry it anywhere to use it. */
+    if (moved < 10) {
+      var p = tinPos();
+      scatterFood(n, p.x, p.y, tin.r + 16);
+    } else {
+      scatterFood(n, x, y, 34);
     }
-    addRipple(x, y, 26 + Math.random() * 16, 0, 0.2, 0.25);
     if (reduced) { step(0.016); draw(); }
   }, { passive: true });
   document.addEventListener("visibilitychange", function () {
