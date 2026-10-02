@@ -1135,15 +1135,23 @@
       seeds: [],
     };
     // food penned inside the hoop
-    /* Floating pellets raft together and drift to one side of the hoop
-       rather than spreading evenly — an even fill reads as a pattern. */
-    var lean = Math.random() * TAU;
+    /* Fixed layout. Math.random() here meant the food sat differently on
+       every refresh, which made the feeder look like it was being
+       regenerated rather than being a thing that is there. Deterministic
+       hash instead, so it is the same feeder every time. */
+    function det(i) {
+      var x = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    var lean = 2.2;                       // the raft always sits this way
     for (var i = 0; i < 30; i++) {
-      var a = lean + (Math.random() - 0.5) * 2.6;
-      var d = Math.pow(Math.random(), 0.65) * 16;
-      tin.seeds.push({ x: Math.cos(a) * d * 0.85 + Math.cos(lean) * 4,
-                       y: Math.sin(a) * d * 0.85 + Math.sin(lean) * 4,
-                       r: 1.3 + Math.random() * 1.3 });
+      var a = lean + (det(i) - 0.5) * 2.6;
+      var d = Math.pow(det(i + 77), 0.65) * 13;
+      tin.seeds.push({
+        x: Math.cos(a) * d * 0.85 + Math.cos(lean) * 3,
+        y: Math.sin(a) * d * 0.85 + Math.sin(lean) * 3,
+        r: 1.3 + det(i + 311) * 1.2,
+      });
     }
   }
 
@@ -1175,108 +1183,124 @@
     if (!tin) return;
     var p = tinPos(), r = tin.r;
 
+    /* Drawn as a tub rather than a hoop. The depth cue that does the work
+       is offsetting the opening from the outer rim: from straight above a
+       concentric ring is flat, but shift the hole up-left and you are
+       suddenly looking down into something with a wall. Everything else
+       — cast shadow, lit and shaded rim, the inner wall, food sunk below
+       the rim — follows from one light sitting up and to the left. */
+    var ox = -2.6, oy = -3.2;          // how far you see into it
+    var inner = r * 0.72;
+
     ctx.save();
     ctx.translate(p.x, p.y);
 
-    /* A floating object is mostly read from how the water behaves around
-       it, not from the object. Three things do that work: a shadow cast
-       down and offset, a dark contact line where the hull meets the
-       surface, and a bright meniscus where water climbs the outside. */
-
-    ctx.globalAlpha = 0.2;
+    // cast shadow on the water, offset away from the light
+    ctx.globalAlpha = 0.26;
     ctx.fillStyle = "#03120d";
     ctx.beginPath();
-    ctx.ellipse(4, 7, r * 1.06, r * 0.98, 0, 0, TAU);
+    ctx.ellipse(5, 8, r * 1.04, r * 0.96, 0, 0, TAU);
     ctx.fill();
 
-    // the water it holds, calmer than the pond outside it
-    ctx.globalAlpha = 0.3;
+    // the body of the tub
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = C.ringDark;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+
+    // rim, lit along the top left and falling into shade opposite
+    var rim = ctx.createLinearGradient(-r * 0.7, -r * 0.7, r * 0.7, r * 0.7);
+    rim.addColorStop(0, "#f0dcb4");
+    rim.addColorStop(0.42, C.ring);
+    rim.addColorStop(1, C.ringDark);
+    ctx.fillStyle = rim;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 1.2, 0, TAU);
+    ctx.fill();
+
+    // the opening, offset — this is what makes it read as having depth
+    ctx.fillStyle = C.ringDark;
+    ctx.beginPath();
+    ctx.arc(ox, oy, inner + 1.6, 0, TAU);
+    ctx.fill();
+
+    // the inner wall you can see down the near side, darker still
+    var wall = ctx.createLinearGradient(0, oy - inner, 0, oy + inner);
+    wall.addColorStop(0, "#2b2113");
+    wall.addColorStop(1, "#6a5634");
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = wall;
+    ctx.beginPath();
+    ctx.arc(ox, oy, inner, 0, TAU);
+    ctx.fill();
+
+    // water standing in the bottom
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = C.deep;
     ctx.beginPath();
-    ctx.arc(0, 0, r - 2, 0, TAU);
+    ctx.arc(ox, oy, inner - 1.4, 0, TAU);
     ctx.fill();
 
-    // food, bunched to one side the way floating pellets collect
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = "#6b4a1c";
+    // food, with the rim's shadow falling across the far side of it
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ox, oy, inner - 1.4, 0, TAU);
+    ctx.clip();
+
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = "#5e3f17";
     ctx.beginPath();
     for (var j = 0; j < tin.seeds.length; j++) {
       var sh = tin.seeds[j];
-      ctx.moveTo(sh.x + 1.2 + sh.r, sh.y + 1.6);
-      ctx.arc(sh.x + 1.2, sh.y + 1.6, sh.r, 0, TAU);
+      ctx.moveTo(sh.x + ox + 1.4 + sh.r, sh.y + oy + 1.8);
+      ctx.arc(sh.x + ox + 1.4, sh.y + oy + 1.8, sh.r, 0, TAU);
     }
     ctx.fill();
 
-    ctx.globalAlpha = 0.95;
+    ctx.globalAlpha = 0.96;
     ctx.fillStyle = "#c98b3e";
     ctx.beginPath();
     for (var i = 0; i < tin.seeds.length; i++) {
       var sd = tin.seeds[i];
-      ctx.moveTo(sd.x + sd.r, sd.y);
-      ctx.arc(sd.x, sd.y, sd.r, 0, TAU);
+      ctx.moveTo(sd.x + ox + sd.r, sd.y + oy);
+      ctx.arc(sd.x + ox, sd.y + oy, sd.r, 0, TAU);
     }
     ctx.fill();
 
-    // a few catching the light on top
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = "#f0c27a";
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#f3cd8c";
     ctx.beginPath();
     for (var k2 = 0; k2 < tin.seeds.length; k2 += 3) {
       var sl = tin.seeds[k2];
-      ctx.moveTo(sl.x - sl.r * 0.3 + sl.r * 0.5, sl.y - sl.r * 0.3);
-      ctx.arc(sl.x - sl.r * 0.3, sl.y - sl.r * 0.3, sl.r * 0.5, 0, TAU);
+      ctx.moveTo(sl.x + ox - sl.r * 0.3 + sl.r * 0.5, sl.y + oy - sl.r * 0.3);
+      ctx.arc(sl.x + ox - sl.r * 0.3, sl.y + oy - sl.r * 0.3, sl.r * 0.5, 0, TAU);
     }
     ctx.fill();
 
-    /* The hoop itself, as a tube rather than a line: a dark base ring,
-       then a lit arc along the upper left and a shaded one opposite, so
-       it reads as round instead of as a stroke. */
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = C.ringDark;
-    ctx.lineWidth = 6;
+    // the rim throws a shadow down into the tub
+    var cast = ctx.createLinearGradient(0, oy - inner, 0, oy + inner * 0.3);
+    cast.addColorStop(0, "rgba(10,8,4,0.55)");
+    cast.addColorStop(1, "rgba(10,8,4,0)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = cast;
+    ctx.fillRect(ox - inner, oy - inner, inner * 2, inner * 2);
+    ctx.restore();
+
+    // a bright line along the lit edge of the rim
+    ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = "#fbf0d6";
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
+    ctx.arc(0, 0, r - 1.6, Math.PI * 1.05, Math.PI * 1.78);
     ctx.stroke();
 
-    ctx.globalAlpha = 0.95;
-    ctx.strokeStyle = C.ring;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 0.6, 0, TAU);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = "#f3e3c2";
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 1.8, Math.PI * 1.08, Math.PI * 1.82);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.45;
-    ctx.strokeStyle = "#3a2d16";
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(0, 0, r + 1.4, Math.PI * 0.12, Math.PI * 0.82);
-    ctx.stroke();
-
-    // bamboo is jointed; a couple of bands stop it reading as plastic
-    ctx.globalAlpha = 0.4;
-    ctx.strokeStyle = C.ringDark;
-    ctx.lineWidth = 1.2;
-    for (var b2 = 0; b2 < 4; b2++) {
-      var ba = b2 * (TAU / 4) + 0.6;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(ba) * (r - 3.2), Math.sin(ba) * (r - 3.2));
-      ctx.lineTo(Math.cos(ba) * (r + 3.2), Math.sin(ba) * (r + 3.2));
-      ctx.stroke();
-    }
-
-    // meniscus: water climbing the outside of the hull
+    // meniscus where the water climbs the hull
     ctx.globalAlpha = 0.3;
     ctx.strokeStyle = C.light;
     ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.arc(0, 0, r + 4, 0, TAU);
+    ctx.arc(0, 0, r + 3.5, 0, TAU);
     ctx.stroke();
 
     if (!tinHinted && !reduced) {
