@@ -297,19 +297,43 @@
 
     if (tab) tab.textContent = R.name || "";
 
+    function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
     function apply(min) {
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
-      try { localStorage.setItem("cardMin", min ? "1" : "0"); } catch (e) {}
+      store("cardMin", min ? "1" : "0");
     }
 
-    var saved = null;
-    try { saved = localStorage.getItem("cardMin"); } catch (e) {}
-    if (saved === "1") apply(true);
+    /* Starts collapsed to just the name, so the pond is the first thing
+       you see. */
+    var saved = read("cardMin");
+    apply(saved === null ? true : saved === "1");
 
-    btn.addEventListener("click", function () {
-      apply(!card.classList.contains("is-min"));
+    /* The control pulses until it has been used once. After that the
+       hint is noise — you already know the card is there. */
+    if (!read("cardSeen")) card.classList.add("is-hint");
+
+    function toggle() {
+      var opening = card.classList.contains("is-min");
+      apply(!opening ? true : false);
+      if (opening) {
+        card.classList.remove("is-hint");
+        store("cardSeen", "1");
+      }
+    }
+
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggle();
+    });
+
+    /* While collapsed the whole tab is the target, not just the little
+       plus — a 30px button is a mean thing to ask someone to find. */
+    card.addEventListener("click", function () {
+      if (card.classList.contains("is-min")) toggle();
     });
   })();
 

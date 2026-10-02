@@ -205,7 +205,45 @@ body::after {
 
 .card { position: relative; transition: max-width .35s var(--ease); }
 
-.card.is-min { max-width: 17rem; }
+.card.is-min { max-width: 17rem; cursor: pointer; }
+.card.is-min:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--rule)); }
+
+/* ---- the first-run hint --------------------------------------------------
+   The card starts collapsed, so something has to say "open me". A ring
+   pulses out of the control until it has been used once; after that the
+   hint is just noise.
+   -------------------------------------------------------------------------- */
+
+.card.is-hint .card__toggle span,
+.card.is-hint .card__toggle span::after { background: var(--accent); }
+
+.card.is-hint .card__toggle::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 8px;
+  border: 1.5px solid var(--accent);
+  animation: hintRing 2.1s var(--ease) infinite;
+  pointer-events: none;
+}
+
+@keyframes hintRing {
+  0%   { opacity: .7; transform: scale(1); }
+  70%  { opacity: 0;  transform: scale(1.75); }
+  100% { opacity: 0;  transform: scale(1.75); }
+}
+
+/* and the tab itself breathes very slightly, so the eye lands on it */
+.card.is-hint .card__tab { animation: hintGlow 2.1s var(--ease) infinite; }
+@keyframes hintGlow {
+  0%, 100% { color: var(--fg-soft); }
+  50%      { color: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.is-hint .card__toggle::before { animation: none; opacity: .7; }
+  .card.is-hint .card__tab { animation: none; color: var(--accent); }
+}
 .card.is-min .card__body { display: none; }
 .card.is-min .card__toggle span { transform: rotate(180deg); }
 .card.is-min .card__toggle span::after { transform: rotate(90deg) scaleX(1); }
