@@ -275,6 +275,15 @@
       }
     }
 
+    /* The feeder sits in the water, so koi go round it rather than
+       under it. Scaled by the fish's own girth so a big one keeps a
+       wider berth. */
+    var shove = tinRepel(head.x, head.y, 18 + f.girth, _tr);
+    if (shove) {
+      ax += _tr[0] * shove * 6;
+      ay += _tr[1] * shove * 6;
+    }
+
     // A recent splash counts as fear too, and fades out on its own.
     if (f.startle > fleeing) fleeing = f.startle;
     if (f.startle > panic) panic = f.startle;
@@ -945,6 +954,12 @@
         dimple(b);
       }
 
+      var bump = tinRepel(b.x, b.y, 6, _tr);
+      if (bump) {
+        var away = Math.atan2(_tr[1], _tr[0]);
+        b.a += Math.atan2(Math.sin(away - b.a), Math.cos(away - b.a)) * 0.35;
+      }
+
       b.x += Math.cos(b.a) * b.v;
       b.y += Math.sin(b.a) * b.v;
 
@@ -1056,6 +1071,7 @@
       var n = 10 + (Math.random() * 18 | 0);
       for (var i = 0; i < n; i++) {
         var a = Math.random() * TAU, r = Math.pow(Math.random(), 0.6) * spread;
+        if (!clearOfTin(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 10)) continue;
         weed2.push({
           x: cx + Math.cos(a) * r,
           y: cy + Math.sin(a) * r,
@@ -1084,6 +1100,9 @@
       // a slow prevailing drift, so a mat is never completely static
       p.vx += Math.cos(t * 0.05 + p.rot) * 0.004;
       p.vy += Math.sin(t * 0.04 + p.rot) * 0.004;
+      // nudged aside rather than drifting across the hull
+      var push = tinRepel(p.x, p.y, 4, _tr);
+      if (push) { p.vx += _tr[0] * push * 0.6; p.vy += _tr[1] * push * 0.6; }
       p.vx *= 0.93; p.vy *= 0.93;
       p.x += p.vx; p.y += p.vy;
       if (p.x < -20) p.x += W + 40; else if (p.x > W + 20) p.x -= W + 40;
@@ -1129,7 +1148,7 @@
     tin = {
       x: Math.min(W * 0.17, 260),
       y: H * 0.74,
-      r: 30,
+      r: 40,
       ox: 0, oy: 0, vx: 0, vy: 0,
       phase: 0,
       seeds: [],
@@ -1143,16 +1162,24 @@
       var x = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
       return x - Math.floor(x);
     }
-    var lean = 2.2;                       // the raft always sits this way
-    for (var i = 0; i < 30; i++) {
-      var a = lean + (det(i) - 0.5) * 2.6;
-      var d = Math.pow(det(i + 77), 0.65) * 13;
-      tin.seeds.push({
-        x: Math.cos(a) * d * 0.85 + Math.cos(lean) * 3,
-        y: Math.sin(a) * d * 0.85 + Math.sin(lean) * 3,
-        r: 1.3 + det(i + 311) * 1.2,
+    /* Filled, not sprinkled. Distance is sqrt-distributed so the grains
+       sit evenly across the whole opening rather than bunching at the
+       middle, and they are sorted by distance so the outer ones are laid
+       down first — the heap then reads as piled up rather than flat. */
+    var fill = tin.r * 0.67;
+    var grains = [];
+    for (var i = 0; i < 135; i++) {
+      var a = det(i) * TAU;
+      var d = Math.sqrt(det(i + 77)) * fill;
+      grains.push({
+        x: Math.cos(a) * d,
+        y: Math.sin(a) * d * 0.96,
+        d: d,
+        r: 1.5 + det(i + 311) * 1.5 + (1 - d / fill) * 0.5,
       });
     }
+    grains.sort(function (p1, p2) { return p2.d - p1.d; });
+    tin.seeds = grains;
   }
 
   function tinPos() {
@@ -1160,6 +1187,30 @@
       x: tin.x + tin.ox + Math.sin(t * 0.3) * 2.5,
       y: tin.y + tin.oy + Math.sin(t * 0.55) * 1.8,
     };
+  }
+
+  /* The feeder is solid. Nothing spawns on top of it and nothing drifts
+     or swims through it — a lily pad growing out of the middle of a tub,
+     or a koi sliding under one, gives the whole thing away as a drawing. */
+  function clearOfTin(x, y, pad) {
+    if (!tin) return true;
+    var dx = x - tin.x, dy = y - tin.y;
+    var keep = tin.r + (pad || 0);
+    return dx * dx + dy * dy > keep * keep;
+  }
+
+  /* Outward push for anything that has got too close. */
+  function tinRepel(x, y, pad, out) {
+    out[0] = 0; out[1] = 0;
+    if (!tin) return 0;
+    var p = tinPos();
+    var dx = x - p.x, dy = y - p.y;
+    var keep = tin.r + (pad || 0);
+    var d2 = dx * dx + dy * dy;
+    if (d2 >= keep * keep) return 0;
+    var d = Math.sqrt(d2) || 1;
+    out[0] = dx / d; out[1] = dy / d;
+    return 1 - d / keep;
   }
 
   function tinAt(x, y) {
@@ -1247,6 +1298,17 @@
     ctx.beginPath();
     ctx.arc(ox, oy, inner - 1.4, 0, TAU);
     ctx.clip();
+
+    // a mound of shadow beneath the grains, so the fill has depth
+    ctx.globalAlpha = 0.85;
+    var heap = ctx.createRadialGradient(ox - inner * 0.2, oy - inner * 0.25, 1,
+                                        ox, oy, inner);
+    heap.addColorStop(0, "#b07c33");
+    heap.addColorStop(1, "#6b4a1c");
+    ctx.fillStyle = heap;
+    ctx.beginPath();
+    ctx.arc(ox, oy, inner - 2, 0, TAU);
+    ctx.fill();
 
     ctx.globalAlpha = 0.4;
     ctx.fillStyle = "#5e3f17";
@@ -1351,6 +1413,8 @@
     pads = [];
     var padPts = scatter(Math.max(4, Math.min(12, Math.round((W * H) / 165000))));
     for (var i = 0; i < padPts.length; i++) {
+      // a pad growing out of the middle of the feeder gives the game away
+      if (!clearOfTin(padPts[i].x, padPts[i].y, 64)) continue;
       pads.push({
         x: padPts[i].x,
         y: padPts[i].y,
@@ -1563,6 +1627,7 @@
     }
   }
   var _wf = [0, 0];
+  var _tr = [0, 0];
 
   /* ---- deformable wavefronts ------------------------------------------
      A ring is stored as N radial samples. Dragging the cursor through one
@@ -2138,10 +2203,10 @@
     initLight();
     makeBottom();
     initBackdrop();
+    makeTin();          // before anything that has to keep clear of it
     makePads();
     padBuoyancy();
     makeDuckweed();
-    makeTin();
     makeBugs();
     stock();
   }

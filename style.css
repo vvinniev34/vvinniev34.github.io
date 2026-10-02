@@ -223,38 +223,37 @@ body::after {
    -------------------------------------------------------------------------- */
 
 .card.is-hint {
-  animation: hintCard 2.3s var(--ease) infinite;
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  animation: hintCard 2.4s ease-out infinite;
 }
 .card.is-hint .card__toggle span,
 .card.is-hint .card__toggle span::after { background: var(--accent); }
 .card.is-hint .card__tab { color: var(--accent); }
 
-/* Two rings travelling outward, half a cycle apart, with the card itself
-   breathing very slightly — the same shape as a ripple leaving the
-   surface, which is the one visual language this page already has.
+/* Two rings leaving the card, half a cycle apart.
+
+   The previous version also scaled the card and animated the border
+   colour on the same curve, which read badly: var(--ease) is heavily
+   front-loaded, so the card sat swollen and tinted for most of the cycle
+   and the outward motion only happened at the end. Now the border simply
+   holds a constant soft tint and nothing scales — all the motion is the
+   rings travelling out, on a plain ease-out.
 
    It has to be box-shadow rather than a pseudo-element: .card has
    overflow:hidden to keep the terminal's corners inside the radius, so
-   anything drawn outside the border box as a child gets clipped. A
-   shadow is not. */
+   anything drawn outside the border box as a child gets clipped. */
 @keyframes hintCard {
   0% {
-    transform: scale(1);
-    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-    box-shadow: 0 0 0 0   color-mix(in srgb, var(--accent) 42%, transparent),
-                0 0 0 0   color-mix(in srgb, var(--accent) 0%,  transparent);
+    box-shadow: 0 0 0 0    color-mix(in srgb, var(--accent) 40%, transparent),
+                0 0 0 0    color-mix(in srgb, var(--accent) 0%,  transparent);
   }
   50% {
-    transform: scale(1.014);
-    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-    box-shadow: 0 0 0 13px color-mix(in srgb, var(--accent) 0%,  transparent),
-                0 0 0 5px  color-mix(in srgb, var(--accent) 30%, transparent);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 0    color-mix(in srgb, var(--accent) 32%, transparent);
   }
   100% {
-    transform: scale(1);
-    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-    box-shadow: 0 0 0 26px color-mix(in srgb, var(--accent) 0%,  transparent),
-                0 0 0 20px color-mix(in srgb, var(--accent) 0%,  transparent);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent);
   }
 }
 
