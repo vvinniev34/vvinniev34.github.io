@@ -223,20 +223,38 @@ body::after {
    -------------------------------------------------------------------------- */
 
 .card.is-hint {
-  animation: hintCard 2.2s var(--ease) infinite;
+  animation: hintCard 2.3s var(--ease) infinite;
 }
 .card.is-hint .card__toggle span,
 .card.is-hint .card__toggle span::after { background: var(--accent); }
 .card.is-hint .card__tab { color: var(--accent); }
 
+/* Two rings travelling outward, half a cycle apart, with the card itself
+   breathing very slightly — the same shape as a ripple leaving the
+   surface, which is the one visual language this page already has.
+
+   It has to be box-shadow rather than a pseudo-element: .card has
+   overflow:hidden to keep the terminal's corners inside the radius, so
+   anything drawn outside the border box as a child gets clipped. A
+   shadow is not. */
 @keyframes hintCard {
-  0%, 100% {
-    border-color: color-mix(in srgb, var(--rule) 65%, transparent);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
+  0% {
+    transform: scale(1);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow: 0 0 0 0   color-mix(in srgb, var(--accent) 42%, transparent),
+                0 0 0 0   color-mix(in srgb, var(--accent) 0%,  transparent);
   }
   50% {
-    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+    transform: scale(1.014);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow: 0 0 0 13px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 5px  color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow: 0 0 0 26px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 20px color-mix(in srgb, var(--accent) 0%,  transparent);
   }
 }
 
