@@ -297,38 +297,26 @@
 
     if (tab) tab.textContent = R.name || "";
 
-    function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-    function read(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-
     function apply(min) {
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
-      store("cardMin", min ? "1" : "0");
     }
 
-    /* Starts collapsed to just the name, so the pond is the first thing
-       you see. */
-    var saved = read("cardMin");
-    apply(saved === null ? true : saved === "1");
-
-    /* The control pulses until it has been used once. After that the
-       hint is noise — you already know the card is there. */
-    if (!read("cardSeen")) card.classList.add("is-hint");
+    /* Always starts collapsed with the hint showing — deliberately not
+       remembered. Every visit opens on the pond, and the control always
+       announces itself; the hint stops only once it has been used in
+       this session. */
+    apply(true);
+    card.classList.add("is-hint");
 
     function toggle() {
       var opening = card.classList.contains("is-min");
-      apply(!opening ? true : false);
-      if (opening) {
-        card.classList.remove("is-hint");
-        store("cardSeen", "1");
-      }
+      apply(!opening);
+      if (opening) card.classList.remove("is-hint");
     }
 
-    btn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      toggle();
-    });
+    btn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
 
     /* While collapsed the whole tab is the target, not just the little
        plus — a 30px button is a mean thing to ask someone to find. */

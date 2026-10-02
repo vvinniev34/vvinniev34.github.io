@@ -41,6 +41,8 @@ html[data-theme="light"] {
   --pad:        #47805a;   /* lily pads */
   --pad-rim:    #8cc494;
   --lotus:      #f6e3ea;
+  --tin:        #b8a179;   /* the floating feed tin */
+  --tin-rim:    #8a7352;
   --strider:    #3d4a42;   /* water striders */
   --koi-cream:  #fdfaf4;
   --koi-dark:   #2c2a26;
@@ -72,6 +74,8 @@ html[data-theme="dark"] {
   --pad:        #1b4636;   /* lily pads */
   --pad-rim:    #39805c;
   --lotus:      #e8cdd8;
+  --tin:        #6d5c40;   /* the floating feed tin */
+  --tin-rim:    #473a27;
   --strider:    #0c1a16;   /* water striders */
   --koi-cream:  #f2ece0;
   --koi-dark:   #14120f;

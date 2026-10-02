@@ -93,6 +93,8 @@
     C.pad       = v("--pad", "#5d8f6b");
     C.padRim    = v("--pad-rim", "#7fb287");
     C.lotus     = v("--lotus", "#f6e3ea");
+    C.tin       = v("--tin", "#b8a179");
+    C.tinRim    = v("--tin-rim", "#8a7352");
     C.strider   = v("--strider", "#3d4a42");
     C.stone     = v("--stone", "#93a498");
     C.stoneLit  = v("--stone-lit", "#b7c3b5");
@@ -1108,6 +1110,110 @@
     ctx.globalAlpha = 1;
   }
 
+  /* ---- the feed tin -------------------------------------------------------
+     Somewhere the pellets come from. Koi ponds use a floating feeder ring
+     to stop food drifting off, so a tin bobbing on the surface is both
+     the authentic answer and an obvious thing to reach for.
+
+     Grab it and you take a handful — a varying one, as a handful is —
+     which follows the cursor until you let go, then scatters where you
+     dropped it.
+     -------------------------------------------------------------------------- */
+
+  var tin = null;
+  var hand = null;          // { n, x, y } while a handful is being carried
+
+  function makeTin() {
+    tin = {
+      x: W * (0.2 + Math.random() * 0.6),
+      y: H * (0.68 + Math.random() * 0.2),
+      r: 26,
+      ox: 0, oy: 0, vx: 0, vy: 0,
+      phase: Math.random() * TAU,
+      seeds: [],
+    };
+    // the pellets heaped inside it
+    for (var i = 0; i < 22; i++) {
+      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 13;
+      tin.seeds.push({ x: Math.cos(a) * d, y: Math.sin(a) * d,
+                       r: 1.5 + Math.random() * 1.3 });
+    }
+  }
+
+  function tinAt(x, y) {
+    if (!tin) return false;
+    var dx = x - (tin.x + tin.ox), dy = y - (tin.y + tin.oy);
+    return dx * dx + dy * dy < (tin.r + 10) * (tin.r + 10);
+  }
+
+  function updateTin(dt) {
+    if (!tin) return;
+    // bobs and drifts on the waves like everything else afloat
+    waveForce(tin.x + tin.ox, tin.y + tin.oy, _wf, false);
+    tin.vx += _wf[0] * 0.5 - tin.ox * 0.02;
+    tin.vy += _wf[1] * 0.5 - tin.oy * 0.02;
+    tin.vx *= 0.96; tin.vy *= 0.96;
+    tin.ox += tin.vx; tin.oy += tin.vy;
+  }
+
+  function drawTin() {
+    if (!tin) return;
+    var x = tin.x + tin.ox + Math.sin(t * 0.12 + tin.phase) * 4;
+    var y = tin.y + tin.oy + Math.sin(t * 0.5 + tin.phase) * 1.6;
+    var r = tin.r;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#03120d";
+    ctx.beginPath();
+    ctx.ellipse(3, 5, r, r * 0.9, 0, 0, TAU);
+    ctx.fill();
+
+    // rim
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = C.tinRim;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+
+    // inside
+    ctx.fillStyle = C.tin;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.82, 0, TAU);
+    ctx.fill();
+
+    // the heap of food, in one path
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#c98b3e";
+    ctx.beginPath();
+    for (var i = 0; i < tin.seeds.length; i++) {
+      var sd = tin.seeds[i];
+      ctx.moveTo(sd.x + sd.r, sd.y);
+      ctx.arc(sd.x, sd.y, sd.r, 0, TAU);
+    }
+    ctx.fill();
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawHand() {
+    if (!hand) return;
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#c98b3e";
+    ctx.beginPath();
+    for (var i = 0; i < hand.bits.length; i++) {
+      var b = hand.bits[i];
+      var px = hand.x + b.x, py = hand.y + b.y;
+      ctx.moveTo(px + b.r, py);
+      ctx.arc(px, py, b.r, 0, TAU);
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   function makePads() {
     pads = [];
     var padPts = scatter(Math.max(4, Math.min(12, Math.round((W * H) / 165000))));
@@ -1731,6 +1837,7 @@
     updateRipples(dt);
     fish.forEach(function (f) { updateFish(f, dt); });
     updateDuckweed(dt);
+    updateTin(dt);
     updateBugs(dt);
 
     /* The cursor drags a wake across the surface. Rings are spawned per
@@ -1854,7 +1961,9 @@
 
     drawDuckweed();      // floating leaves, carried by the waves
     drawBugs();          // striders on the surface film
+    drawTin();
     drawPads();          // floating on the surface, so over the fish
+    drawHand();          // the handful follows the cursor, above everything
   }
 
   var last = 0;
@@ -1899,6 +2008,7 @@
     makePads();
     padBuoyancy();
     makeDuckweed();
+    makeTin();
     makeBugs();
     stock();
   }
@@ -1938,6 +2048,8 @@
     },
     count: function () { return fish.length; },
     pellets: function () { return pellets.length; },
+    tin: function () { return tin; },
+    hand: function () { return hand; },
     splash: function (x, y) {
       splash(x == null ? W * 0.5 : x, y == null ? H * 0.45 : y);
     },
@@ -1987,6 +2099,11 @@
     mouse.x = e.clientX;
     mouse.y = e.clientY;
     mouse.on = true;
+
+    if (hand) { hand.x = e.clientX; hand.y = e.clientY; }
+    else if (!phone()) {
+      document.body.style.cursor = tinAt(e.clientX, e.clientY) ? "grab" : "";
+    }
   }, { passive: true });
 
   document.addEventListener("pointerleave", function () { mouse.on = false; });
@@ -1995,12 +2112,45 @@
      listens on the window and skips anything you were actually trying to use
      — otherwise every link click and keystroke in the terminal throws water. */
   window.addEventListener("pointerdown", function (e) {
+    if (phone()) return;
     if (e.target && e.target.closest &&
-        e.target.closest("a, button, input, textarea, select, .term")) return;
+        e.target.closest("a, button, input, textarea, select, .term, .card")) return;
+
+    /* Reaching into the tin takes a handful rather than splashing. The
+       amount varies, because a handful does. */
+    if (tinAt(e.clientX, e.clientY)) {
+      var n = 7 + (Math.random() * 10 | 0);
+      hand = { n: n, x: e.clientX, y: e.clientY, bits: [] };
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 9;
+        hand.bits.push({ x: Math.cos(a) * d, y: Math.sin(a) * d,
+                         r: 1.4 + Math.random() * 1.2 });
+      }
+      document.body.style.cursor = "grabbing";
+      return;
+    }
+
     splash(e.clientX, e.clientY);
-    if (phone()) {
-    // nothing to start; a resize back above the breakpoint will set it up
-  } else if (reduced) { step(0.016); draw(); }
+    if (reduced) { step(0.016); draw(); }
+  }, { passive: true });
+
+  /* Let go and the handful scatters where you dropped it. */
+  window.addEventListener("pointerup", function (e) {
+    if (!hand) return;
+    var n = hand.n, x = hand.x, y = hand.y;
+    hand = null;
+    document.body.style.cursor = "";
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 34;
+      pellets.push({
+        x: x + Math.cos(a) * d, y: y + Math.sin(a) * d,
+        vx: Math.cos(a) * 0.2, vy: Math.sin(a) * 0.2,
+        r: 1.6 + Math.random() * 1.6,
+        age: 0, gone: false,
+      });
+    }
+    addRipple(x, y, 26 + Math.random() * 16, 0, 0.2, 0.25);
+    if (reduced) { step(0.016); draw(); }
   }, { passive: true });
   document.addEventListener("visibilitychange", function () {
     document.hidden ? stop() : start();
