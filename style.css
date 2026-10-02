@@ -243,17 +243,33 @@ body::after {
    overflow:hidden to keep the terminal's corners inside the radius, so
    anything drawn outside the border box as a child gets clipped. */
 @keyframes hintCard {
+  /* The tag swells at the instant each ring leaves it, so the size
+     change and the ripple are one event rather than two. Both rings get
+     a bump, the second smaller than the first. */
   0% {
-    box-shadow: 0 0 0 0    color-mix(in srgb, var(--accent) 40%, transparent),
+    transform: scale(1);
+    box-shadow: 0 0 0 0    color-mix(in srgb, var(--accent) 42%, transparent),
                 0 0 0 0    color-mix(in srgb, var(--accent) 0%,  transparent);
   }
-  50% {
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent),
-                0 0 0 0    color-mix(in srgb, var(--accent) 32%, transparent);
+  9% {
+    transform: scale(1.028);
+    box-shadow: 0 0 0 4px  color-mix(in srgb, var(--accent) 30%, transparent),
+                0 0 0 0    color-mix(in srgb, var(--accent) 0%,  transparent);
+  }
+  46% {
+    transform: scale(1);
+    box-shadow: 0 0 0 15px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 0    color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  55% {
+    transform: scale(1.016);
+    box-shadow: 0 0 0 15px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 4px  color-mix(in srgb, var(--accent) 22%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent),
-                0 0 0 14px color-mix(in srgb, var(--accent) 0%,  transparent);
+    transform: scale(1);
+    box-shadow: 0 0 0 15px color-mix(in srgb, var(--accent) 0%,  transparent),
+                0 0 0 15px color-mix(in srgb, var(--accent) 0%,  transparent);
   }
 }
 

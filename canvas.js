@@ -1145,12 +1145,24 @@
   var tinHinted = false;
 
   function makeTin() {
+    /* Sits in the open water to the left of the card, tucked up against
+       its edge rather than at a fixed fraction of the width — on a
+       narrower window a fixed fraction puts it underneath the card. */
+    var pad = Math.min(Math.max(1.1 * 16, 0.05 * W), 2.5 * 16);
+    var cardW = Math.min(41 * 16, W - 2 * pad);
+    var margin = (W - cardW) / 2;
+    // on a narrow window there is barely any open water, so it shrinks
+    // to fit rather than sitting half under the card
+    var r = Math.min(40, Math.max(20, (margin - 28) * 0.5));
+    var x = Math.max(r + 14, margin - r - 18);
+
     tin = {
-      x: Math.min(W * 0.17, 260),
+      x: x,
       y: H * 0.74,
-      r: 40,
+      r: r,
       ox: 0, oy: 0, vx: 0, vy: 0,
       phase: 0,
+      tip: 0,          // rocks when you tip food out of it
       seeds: [],
     };
     // food penned inside the hoop
@@ -1166,9 +1178,10 @@
        sit evenly across the whole opening rather than bunching at the
        middle, and they are sorted by distance so the outer ones are laid
        down first — the heap then reads as piled up rather than flat. */
-    var fill = tin.r * 0.67;
+    var fill = r * 0.67;
     var grains = [];
-    for (var i = 0; i < 135; i++) {
+    var count = Math.round(135 * (r / 40) * (r / 40));
+    for (var i = 0; i < count; i++) {
       var a = det(i) * TAU;
       var d = Math.sqrt(det(i + 77)) * fill;
       grains.push({
@@ -1228,6 +1241,7 @@
     tin.vy += _wf[1] * 0.4 - tin.oy * 0.05;
     tin.vx *= 0.95; tin.vy *= 0.95;
     tin.ox += tin.vx; tin.oy += tin.vy;
+    if (tin.tip > 0) tin.tip = Math.max(0, tin.tip - dt * 1.9);
   }
 
   function drawTin() {
@@ -1245,6 +1259,15 @@
 
     ctx.save();
     ctx.translate(p.x, p.y);
+
+    /* The rock when it has just been tipped: a lean in the direction the
+       food went, easing back. */
+    if (tin.tip > 0) {
+      var k = tin.tip / 0.5;
+      var swing = Math.sin(k * Math.PI * 1.5) * k * 0.16;
+      ctx.rotate(swing);
+      ctx.translate(Math.cos(tin.tipDir) * k * 3, Math.sin(tin.tipDir) * k * 3);
+    }
 
     // cast shadow on the water, offset away from the light
     ctx.globalAlpha = 0.26;
@@ -1392,6 +1415,31 @@
     }
     ctx.fill();
     ctx.globalAlpha = 1;
+  }
+
+  /* Tipping the feeder: the food leaves over the rim and lands in a ring
+     around it rather than appearing on top of it, and the tub rocks back
+     from the effort. */
+  function tipOut(n) {
+    var p = tinPos();
+    var lean = Math.random() * TAU;
+    tin.tip = 0.5;
+    tin.tipDir = lean;
+    for (var i = 0; i < n; i++) {
+      var a = lean + (Math.random() - 0.5) * 2.4;
+      var sp = 0.7 + Math.random() * 1.3;
+      pellets.push({
+        x: p.x + Math.cos(a) * (tin.r * 0.8),
+        y: p.y + Math.sin(a) * (tin.r * 0.8),
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        r: 1.6 + Math.random() * 1.6,
+        age: 0, gone: false,
+      });
+    }
+    addRipple(p.x, p.y, tin.r + 30, 0, 0.3, 0.35);
+    sprayBurst(p.x + Math.cos(lean) * tin.r * 0.7,
+               p.y + Math.sin(lean) * tin.r * 0.7,
+               6, { speed: 1.4, r: 1.5, squash: 1, life: 0.36, ring: true });
   }
 
   /* Scatter a handful at a point. Used by both the drop and the plain
@@ -2349,8 +2397,7 @@
     /* A click without a drag just tips food out around the feeder, so
        you do not have to carry it anywhere to use it. */
     if (moved < 10) {
-      var p = tinPos();
-      scatterFood(n, p.x, p.y, tin.r + 16);
+      tipOut(n);
     } else {
       scatterFood(n, x, y, 34);
     }
