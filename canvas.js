@@ -1135,10 +1135,15 @@
       seeds: [],
     };
     // food penned inside the hoop
-    for (var i = 0; i < 26; i++) {
-      var a = Math.random() * TAU, d = Math.sqrt(Math.random()) * 17;
-      tin.seeds.push({ x: Math.cos(a) * d, y: Math.sin(a) * d,
-                       r: 1.4 + Math.random() * 1.2 });
+    /* Floating pellets raft together and drift to one side of the hoop
+       rather than spreading evenly — an even fill reads as a pattern. */
+    var lean = Math.random() * TAU;
+    for (var i = 0; i < 30; i++) {
+      var a = lean + (Math.random() - 0.5) * 2.6;
+      var d = Math.pow(Math.random(), 0.65) * 16;
+      tin.seeds.push({ x: Math.cos(a) * d * 0.85 + Math.cos(lean) * 4,
+                       y: Math.sin(a) * d * 0.85 + Math.sin(lean) * 4,
+                       r: 1.3 + Math.random() * 1.3 });
     }
   }
 
@@ -1173,15 +1178,36 @@
     ctx.save();
     ctx.translate(p.x, p.y);
 
-    // it sits in the water, so it dents the surface under itself
-    ctx.globalAlpha = 0.18;
+    /* A floating object is mostly read from how the water behaves around
+       it, not from the object. Three things do that work: a shadow cast
+       down and offset, a dark contact line where the hull meets the
+       surface, and a bright meniscus where water climbs the outside. */
+
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = "#03120d";
     ctx.beginPath();
-    ctx.ellipse(2, 4, r * 1.02, r * 0.92, 0, 0, TAU);
+    ctx.ellipse(4, 7, r * 1.06, r * 0.98, 0, 0, TAU);
     ctx.fill();
 
-    // food penned inside, drawn before the hoop so the hoop overlaps it
-    ctx.globalAlpha = 0.92;
+    // the water it holds, calmer than the pond outside it
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = C.deep;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, 0, TAU);
+    ctx.fill();
+
+    // food, bunched to one side the way floating pellets collect
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#6b4a1c";
+    ctx.beginPath();
+    for (var j = 0; j < tin.seeds.length; j++) {
+      var sh = tin.seeds[j];
+      ctx.moveTo(sh.x + 1.2 + sh.r, sh.y + 1.6);
+      ctx.arc(sh.x + 1.2, sh.y + 1.6, sh.r, 0, TAU);
+    }
+    ctx.fill();
+
+    ctx.globalAlpha = 0.95;
     ctx.fillStyle = "#c98b3e";
     ctx.beginPath();
     for (var i = 0; i < tin.seeds.length; i++) {
@@ -1191,36 +1217,75 @@
     }
     ctx.fill();
 
-    // the hoop: a bamboo ring, lit on one side
-    ctx.globalAlpha = 0.95;
+    // a few catching the light on top
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#f0c27a";
+    ctx.beginPath();
+    for (var k2 = 0; k2 < tin.seeds.length; k2 += 3) {
+      var sl = tin.seeds[k2];
+      ctx.moveTo(sl.x - sl.r * 0.3 + sl.r * 0.5, sl.y - sl.r * 0.3);
+      ctx.arc(sl.x - sl.r * 0.3, sl.y - sl.r * 0.3, sl.r * 0.5, 0, TAU);
+    }
+    ctx.fill();
+
+    /* The hoop itself, as a tube rather than a line: a dark base ring,
+       then a lit arc along the upper left and a shaded one opposite, so
+       it reads as round instead of as a stroke. */
+    ctx.globalAlpha = 0.9;
     ctx.strokeStyle = C.ringDark;
-    ctx.lineWidth = 5.5;
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, TAU);
     ctx.stroke();
 
+    ctx.globalAlpha = 0.95;
     ctx.strokeStyle = C.ring;
-    ctx.lineWidth = 3.4;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(0, 0, r - 0.4, 0, TAU);
+    ctx.arc(0, 0, r - 0.6, 0, TAU);
     ctx.stroke();
 
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = C.light;
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = "#f3e3c2";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 1.8, Math.PI * 1.08, Math.PI * 1.82);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = "#3a2d16";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 1.4, Math.PI * 0.12, Math.PI * 0.82);
+    ctx.stroke();
+
+    // bamboo is jointed; a couple of bands stop it reading as plastic
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = C.ringDark;
     ctx.lineWidth = 1.2;
+    for (var b2 = 0; b2 < 4; b2++) {
+      var ba = b2 * (TAU / 4) + 0.6;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ba) * (r - 3.2), Math.sin(ba) * (r - 3.2));
+      ctx.lineTo(Math.cos(ba) * (r + 3.2), Math.sin(ba) * (r + 3.2));
+      ctx.stroke();
+    }
+
+    // meniscus: water climbing the outside of the hull
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = C.light;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.arc(0, 0, r - 1.6, Math.PI * 1.05, Math.PI * 1.75);
+    ctx.arc(0, 0, r + 4, 0, TAU);
     ctx.stroke();
 
-    /* Until it has been used, a ring pulses off it — the same hint the
-       card uses, for the same reason: nothing else says "pick me up". */
     if (!tinHinted && !reduced) {
       var k = (t * 0.5) % 1;
       ctx.globalAlpha = (1 - k) * 0.5;
       ctx.strokeStyle = C.accent;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(0, 0, r + 3 + k * 16, 0, TAU);
+      ctx.arc(0, 0, r + 6 + k * 16, 0, TAU);
       ctx.stroke();
     }
 
