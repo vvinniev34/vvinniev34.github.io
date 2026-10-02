@@ -212,6 +212,11 @@ body::after {
 .card.is-min { max-width: 17rem; cursor: pointer; }
 .card.is-min:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--rule)); }
 
+/* The rules that actually do the collapsing. */
+.card.is-min .card__body { display: none; }
+.card.is-min .card__toggle span { transform: rotate(180deg); }
+.card.is-min .card__toggle span::after { transform: rotate(90deg) scaleX(1); }
+
 /* ---- the first-run hint --------------------------------------------------
    The whole collapsed tab is the target, so the whole tab is what
    pulses. Lighting up only the little plus pointed at the wrong thing.
