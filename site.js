@@ -303,6 +303,16 @@
     function phone() { return (window.innerWidth || 0) <= 608; }
 
     function apply(min) {
+      /* Grow from the middle, not from the top-left corner. A placed card
+         is positioned by its left/top, so expanding it unfolds down and
+         to the right; before it was draggable the shell centred it and it
+         opened outward from the middle, which is what it should still
+         look like. Hold the centre and let the edges move. */
+      if (card.classList.contains("is-placed")) {
+        var r = card.getBoundingClientRect();
+        anchor = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
@@ -366,18 +376,29 @@
       card.style.top = Math.max(m, Math.min(y, window.innerHeight - h - m)) + "px";
     }
 
+    /* Hold the remembered centre while the size changes under us. */
+    var anchor = null;
+    function recentre() {
+      if (!anchor) return;
+      var r = card.getBoundingClientRect();
+      card.style.left = (anchor.x - r.width / 2) + "px";
+      card.style.top = (anchor.y - r.height / 2) + "px";
+    }
+
     /* Keep clamping for a while, to track a size that is still changing. */
     var tracking = 0;
     function clampWhile(ms) {
+      recentre();
       clamp();
       if (!window.requestAnimationFrame) return;
       var until = Date.now() + ms;
       if (tracking) return;              // one tracker is enough
       tracking = 1;
       (function tick() {
+        recentre();
         clamp();
         if (Date.now() < until) window.requestAnimationFrame(tick);
-        else tracking = 0;
+        else { tracking = 0; anchor = null; }
       })();
     }
 
@@ -393,8 +414,8 @@
 
     grip.addEventListener("pointerdown", function (e) {
       if (e.button || phone()) return;
-      if (!card.classList.contains("is-placed")) place();
       var r = card.getBoundingClientRect();
+      anchor = null;              // dragging overrides any pending recentre
       drag = { dx: e.clientX - r.left, dy: e.clientY - r.top,
                fromX: e.clientX, fromY: e.clientY, moved: false };
       grip.setPointerCapture && grip.setPointerCapture(e.pointerId);
@@ -403,8 +424,14 @@
 
     grip.addEventListener("pointermove", function (e) {
       if (!drag) return;
-      if (Math.abs(e.clientX - drag.fromX) + Math.abs(e.clientY - drag.fromY) > 4) {
+      /* Only an actual drag takes the card out of the shell's centring.
+         Pressing it to expand used to be enough, which pinned it by its
+         top-left corner — so it then unfolded down and to the right
+         instead of opening outward from the middle. */
+      if (!drag.moved) {
+        if (Math.abs(e.clientX - drag.fromX) + Math.abs(e.clientY - drag.fromY) <= 4) return;
         drag.moved = true;
+        place();
       }
       card.style.left = (e.clientX - drag.dx) + "px";
       card.style.top = (e.clientY - drag.dy) + "px";
