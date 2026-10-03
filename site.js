@@ -306,12 +306,13 @@
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
-      /* Expanding grows the card downward from wherever it sits, which can
-         take it past the bottom of the window. Clamp immediately, and
-         again next frame once the browser has actually laid out the new
-         size — reading it in the same tick can give the old height. */
-      clamp();
-      if (window.requestAnimationFrame) window.requestAnimationFrame(clamp);
+      /* The card's width is transitioned, so on expand it grows from
+         272px to 656px over 350ms. Clamping once — even next frame —
+         reads a width that still fits, and the card only gets pulled
+         back on the next drag, which snaps. Clamp every frame for the
+         length of the transition instead: the card then slides inward
+         as it grows, which looks deliberate. */
+      clampWhile(420);
     }
 
     /* Phones get none of this: the card is the whole screen there, so
@@ -355,13 +356,29 @@
         card.style.top = "";
         return;
       }
-      var w = card.offsetWidth, h = card.offsetHeight;
+      var r0 = card.getBoundingClientRect();
+      var w = r0.width, h = r0.height;
       var m = 8;
       var x = parseFloat(card.style.left);
       var y = parseFloat(card.style.top);
       if (isNaN(x) || isNaN(y)) return;
       card.style.left = Math.max(m, Math.min(x, window.innerWidth - w - m)) + "px";
       card.style.top = Math.max(m, Math.min(y, window.innerHeight - h - m)) + "px";
+    }
+
+    /* Keep clamping for a while, to track a size that is still changing. */
+    var tracking = 0;
+    function clampWhile(ms) {
+      clamp();
+      if (!window.requestAnimationFrame) return;
+      var until = Date.now() + ms;
+      if (tracking) return;              // one tracker is enough
+      tracking = 1;
+      (function tick() {
+        clamp();
+        if (Date.now() < until) window.requestAnimationFrame(tick);
+        else tracking = 0;
+      })();
     }
 
     function place() {
@@ -406,6 +423,8 @@
     grip.addEventListener("pointercancel", endDrag);
 
     window.addEventListener("resize", clamp);
+    // a backstop in case the transition runs long
+    card.addEventListener("transitionend", clamp);
   })();
 
   /* ---- theme toggle ------------------------------------------------------- */
