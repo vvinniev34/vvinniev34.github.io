@@ -167,6 +167,27 @@ body::after {
 
 /* ---- minimising ---------------------------------------------------------- */
 
+/* ---- dragging -----------------------------------------------------------
+   Collapsed, the whole tab is the handle and a click without movement
+   expands it. Expanded, a strip across the top is the handle — it sits
+   over the card's own padding, so it costs no content.
+   -------------------------------------------------------------------------- */
+
+.card__grip {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2.4rem;
+  z-index: 1;
+  cursor: move;
+}
+.card.is-min .card__grip { height: 100%; cursor: pointer; }
+.card.is-dragging .card__grip { cursor: grabbing; }
+.card.is-dragging { transition: none; }
+
+/* Once moved it stops being centred by the shell and holds its own
+   position. */
+.card.is-placed { position: fixed; margin: 0; }
+
 .card__toggle {
   position: absolute;
   top: .55rem;
@@ -617,8 +638,13 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
             backdrop-filter: none;
   }
 
-  /* nothing behind it left to reveal */
-  .card__toggle, .card__tab { display: none !important; }
+  /* nothing behind it left to reveal, and nowhere to drag it to */
+  .card__toggle, .card__tab, .card__grip { display: none !important; }
+  .card.is-placed {
+    position: static;
+    left: auto !important;
+    top: auto !important;
+  }
   .card.is-min .card__body { display: flex; }
 
   /* Was pinned to exactly 100dvh, so anything taller than the viewport

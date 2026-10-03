@@ -289,10 +289,11 @@
      next time too.
      ------------------------------------------------------------------------ */
 
-  (function minimise() {
+  (function cardControls() {
     var card = document.getElementById("card");
     var btn = document.getElementById("card-toggle");
     var tab = document.getElementById("card-tab");
+    var grip = document.getElementById("card-grip");
     if (!card || !btn) return;
 
     if (tab) tab.textContent = R.name || "";
@@ -301,12 +302,11 @@
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
+      if (card.classList.contains("is-placed")) clamp();
     }
 
     /* Always starts collapsed with the hint showing — deliberately not
-       remembered. Every visit opens on the pond, and the control always
-       announces itself; the hint stops only once it has been used in
-       this session. */
+       remembered. Every visit opens on the pond. */
     apply(true);
     card.classList.add("is-hint");
 
@@ -318,11 +318,79 @@
 
     btn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
 
-    /* While collapsed the whole tab is the target, not just the little
-       plus — a 30px button is a mean thing to ask someone to find. */
-    card.addEventListener("click", function () {
-      if (card.classList.contains("is-min")) toggle();
+    /* ---- dragging -------------------------------------------------------
+       The card holds its own position once moved, and is kept inside the
+       viewport — both while dragging and afterwards, since collapsing,
+       expanding or resizing the window can all leave it hanging off an
+       edge otherwise.
+       -------------------------------------------------------------------- */
+
+    var drag = null;
+
+    /* Phones get the card full-screen, so there is nothing to drag and
+       nowhere to drag it. If the window crosses the breakpoint the card
+       has to be handed back to the stylesheet, or it stays pinned at
+       whatever coordinates it was left at. */
+    function phone() { return (window.innerWidth || 0) <= 608; }
+
+    function clamp() {
+      if (phone()) {
+        card.classList.remove("is-placed");
+        card.style.left = "";
+        card.style.top = "";
+        return;
+      }
+      var w = card.offsetWidth, h = card.offsetHeight;
+      var m = 8;
+      var x = parseFloat(card.style.left);
+      var y = parseFloat(card.style.top);
+      if (isNaN(x) || isNaN(y)) return;
+      card.style.left = Math.max(m, Math.min(x, window.innerWidth - w - m)) + "px";
+      card.style.top = Math.max(m, Math.min(y, window.innerHeight - h - m)) + "px";
+    }
+
+    function place() {
+      // freeze where it currently sits, then stop being laid out by flex
+      var r = card.getBoundingClientRect();
+      card.style.left = r.left + "px";
+      card.style.top = r.top + "px";
+      card.classList.add("is-placed");
+    }
+
+    if (!grip) return;
+
+    grip.addEventListener("pointerdown", function (e) {
+      if (e.button || phone()) return;
+      if (!card.classList.contains("is-placed")) place();
+      var r = card.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top,
+               fromX: e.clientX, fromY: e.clientY, moved: false };
+      grip.setPointerCapture && grip.setPointerCapture(e.pointerId);
+      card.classList.add("is-dragging");
     });
+
+    grip.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      if (Math.abs(e.clientX - drag.fromX) + Math.abs(e.clientY - drag.fromY) > 4) {
+        drag.moved = true;
+      }
+      card.style.left = (e.clientX - drag.dx) + "px";
+      card.style.top = (e.clientY - drag.dy) + "px";
+      clamp();
+    });
+
+    function endDrag(e) {
+      if (!drag) return;
+      var moved = drag.moved;
+      drag = null;
+      card.classList.remove("is-dragging");
+      // a press that did not move is a click, and a click opens it
+      if (!moved && card.classList.contains("is-min")) toggle();
+    }
+    grip.addEventListener("pointerup", endDrag);
+    grip.addEventListener("pointercancel", endDrag);
+
+    window.addEventListener("resize", clamp);
   })();
 
   /* ---- theme toggle ------------------------------------------------------- */
