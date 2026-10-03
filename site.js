@@ -298,17 +298,33 @@
 
     if (tab) tab.textContent = R.name || "";
 
+    /* Phones get the card full-screen, so there is nothing to drag and
+       nowhere to drag it. */
+    function phone() { return (window.innerWidth || 0) <= 608; }
+
     function apply(min) {
       card.classList.toggle("is-min", min);
       btn.setAttribute("aria-expanded", min ? "false" : "true");
       btn.setAttribute("aria-label", min ? "Expand" : "Minimise");
-      if (card.classList.contains("is-placed")) clamp();
+      /* Expanding grows the card downward from wherever it sits, which can
+         take it past the bottom of the window. Clamp immediately, and
+         again next frame once the browser has actually laid out the new
+         size — reading it in the same tick can give the old height. */
+      clamp();
+      if (window.requestAnimationFrame) window.requestAnimationFrame(clamp);
     }
 
-    /* Always starts collapsed with the hint showing — deliberately not
-       remembered. Every visit opens on the pond. */
-    apply(true);
-    card.classList.add("is-hint");
+    /* Phones get none of this: the card is the whole screen there, so
+       there is nothing to collapse to, nowhere to drag it, and nothing
+       for a pulse to point at. */
+    if (phone()) {
+      apply(false);
+    } else {
+      /* Always starts collapsed with the hint showing — deliberately not
+         remembered. Every visit opens on the pond. */
+      apply(true);
+      card.classList.add("is-hint");
+    }
 
     function toggle() {
       var opening = card.classList.contains("is-min");
@@ -327,14 +343,13 @@
 
     var drag = null;
 
-    /* Phones get the card full-screen, so there is nothing to drag and
-       nowhere to drag it. If the window crosses the breakpoint the card
-       has to be handed back to the stylesheet, or it stays pinned at
-       whatever coordinates it was left at. */
-    function phone() { return (window.innerWidth || 0) <= 608; }
-
     function clamp() {
+      /* Crossing the breakpoint hands the card back to the stylesheet;
+         otherwise it stays pinned wherever it was dropped, which is
+         exactly how a full-screen layout ends up broken. */
       if (phone()) {
+        card.classList.remove("is-min");
+        card.classList.remove("is-hint");
         card.classList.remove("is-placed");
         card.style.left = "";
         card.style.top = "";

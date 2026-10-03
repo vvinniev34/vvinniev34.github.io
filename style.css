@@ -638,6 +638,9 @@ html[data-theme="dark"] .theme__dot { transform: rotate(180deg); }
             backdrop-filter: none;
   }
 
+  /* No card behaviour at all here: always open, never pulsing, nothing
+     to drag. The card is the screen. */
+  .card.is-hint { animation: none; border: 0; box-shadow: none; transform: none; }
   /* nothing behind it left to reveal, and nowhere to drag it to */
   .card__toggle, .card__tab, .card__grip { display: none !important; }
   .card.is-placed {
